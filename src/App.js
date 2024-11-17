@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Search, PlusCircle, MessageSquare } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Card, CardContent, CardHeader, CardTitle } from './components/ui/card';
+import { Alert, AlertDescription } from './components/ui/alert';
 
 const ForumApp = () => {
   const [questions, setQuestions] = useState([
