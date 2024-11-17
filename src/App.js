@@ -1,36 +1,39 @@
 import React, { useState } from 'react';
-import { Search, Tag, MessageSquare, ThumbsUp } from 'lucide-react';
 
-// Predefined categories
+// Simple SVG Icons
+const Icons = {
+  Search: () => (
+    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+    </svg>
+  ),
+  Tag: () => (
+    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A2 2 0 013 12V7a4 4 0 014-4z" />
+    </svg>
+  )
+};
+
+// Categories for questions
 const CATEGORIES = [
-  "JavaScript", "Python", "Java", "React", "Database", "Algorithms", 
-  "Web Development", "Mobile Development", "Data Structures"
+  "JavaScript", "Python", "Java", "React", "Database", 
+  "Algorithms", "Web Development", "Data Structures"
 ];
 
 function App() {
+  // State management
   const [questions, setQuestions] = useState([]);
   const [showNewQuestion, setShowNewQuestion] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
-  const [newQuestion, setNewQuestion] = useState({ 
-    title: '', 
-    content: '', 
-    code: '', 
-    categories: [] 
+  const [newQuestion, setNewQuestion] = useState({
+    title: '',
+    content: '',
+    code: '',
+    categories: []
   });
 
-  // Function to syntax highlight code
-  const formatCode = (code) => {
-    // Basic syntax highlighting
-    return code.replace(
-      /(const|let|var|function|return|if|else|for|while|class|import|export|default|from|=|\{|\}|=>)/g,
-      '<span class="text-blue-600">$1</span>'
-    ).replace(
-      /(["'`])(?:(?=(\\?))\2.)*?\1/g,
-      '<span class="text-green-600">$&</span>'
-    );
-  };
-
+  // Handle question submission
   const handleSubmitQuestion = (e) => {
     e.preventDefault();
     if (newQuestion.title && (newQuestion.content || newQuestion.code)) {
@@ -38,8 +41,7 @@ function App() {
         id: Date.now(),
         ...newQuestion,
         timestamp: new Date().toLocaleString(),
-        answers: [],
-        votes: 0
+        answers: []
       };
       setQuestions([question, ...questions]);
       setNewQuestion({ title: '', content: '', code: '', categories: [] });
@@ -47,6 +49,7 @@ function App() {
     }
   };
 
+  // Handle answer submission
   const handleSubmitAnswer = (questionId, answerContent, answerCode) => {
     setQuestions(questions.map(q => {
       if (q.id === questionId) {
@@ -56,32 +59,9 @@ function App() {
             id: Date.now(),
             content: answerContent,
             code: answerCode,
-            timestamp: new Date().toLocaleString(),
-            votes: 0
+            timestamp: new Date().toLocaleString()
           }]
         };
-      }
-      return q;
-    }));
-  };
-
-  const handleVote = (questionId, answerId = null, isUpvote = true) => {
-    setQuestions(questions.map(q => {
-      if (q.id === questionId) {
-        if (answerId === null) {
-          // Voting on question
-          return { ...q, votes: q.votes + (isUpvote ? 1 : -1) };
-        } else {
-          // Voting on answer
-          return {
-            ...q,
-            answers: q.answers.map(a => 
-              a.id === answerId 
-                ? { ...a, votes: a.votes + (isUpvote ? 1 : -1) }
-                : a
-            )
-          };
-        }
       }
       return q;
     }));
@@ -91,8 +71,7 @@ function App() {
   const filteredQuestions = questions.filter(q => {
     const matchesSearch = 
       q.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      q.content.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      q.code.toLowerCase().includes(searchTerm.toLowerCase());
+      q.content.toLowerCase().includes(searchTerm.toLowerCase());
     
     const matchesCategory = 
       selectedCategory === 'all' || 
@@ -104,6 +83,7 @@ function App() {
   return (
     <div className="min-h-screen bg-gray-100 p-8">
       <div className="max-w-4xl mx-auto">
+        {/* Header */}
         <h1 className="text-3xl font-bold text-gray-900 mb-8">
           Student Q&A Forum
         </h1>
@@ -111,7 +91,9 @@ function App() {
         {/* Search and Filter Bar */}
         <div className="mb-6 flex gap-4">
           <div className="flex-1 relative">
-            <Search className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
+            <span className="absolute left-3 top-3 text-gray-400">
+              <Icons.Search />
+            </span>
             <input
               type="text"
               placeholder="Search questions..."
@@ -132,7 +114,7 @@ function App() {
           </select>
           <button
             onClick={() => setShowNewQuestion(true)}
-            className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 transition-colors"
+            className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600"
           >
             Ask a Question
           </button>
@@ -143,6 +125,7 @@ function App() {
           <div className="bg-white shadow rounded-lg p-6 mb-6">
             <h2 className="text-xl font-semibold mb-4">Ask a Question</h2>
             <form onSubmit={handleSubmitQuestion}>
+              {/* Title Input */}
               <div className="mb-4">
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Question Title
@@ -155,6 +138,8 @@ function App() {
                   required
                 />
               </div>
+
+              {/* Categories Selection */}
               <div className="mb-4">
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Categories
@@ -178,6 +163,8 @@ function App() {
                   ))}
                 </div>
               </div>
+
+              {/* Question Content */}
               <div className="mb-4">
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Description
@@ -189,6 +176,8 @@ function App() {
                   rows="3"
                 />
               </div>
+
+              {/* Code Input */}
               <div className="mb-4">
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Code (optional)
@@ -200,6 +189,8 @@ function App() {
                   rows="5"
                 />
               </div>
+
+              {/* Form Buttons */}
               <div className="flex gap-2">
                 <button
                   type="submit"
@@ -232,77 +223,51 @@ function App() {
           ) : (
             filteredQuestions.map(question => (
               <div key={question.id} className="bg-white shadow rounded-lg p-6">
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <h2 className="text-xl font-semibold mb-2">{question.title}</h2>
-                    <div className="text-sm text-gray-500 mb-2">
-                      Posted on {question.timestamp}
-                    </div>
-                    <div className="flex gap-2 mb-4">
-                      {question.categories.map(cat => (
-                        <span key={cat} className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                          <Tag className="w-3 h-3 mr-1" />
-                          {cat}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => handleVote(question.id, null, true)}
-                      className="text-gray-500 hover:text-blue-500"
-                    >
-                      <ThumbsUp className="w-5 h-5" />
-                    </button>
-                    <span className="text-sm font-medium">{question.votes}</span>
-                  </div>
+                {/* Question Header */}
+                <h2 className="text-xl font-semibold mb-2">{question.title}</h2>
+                <div className="text-sm text-gray-500 mb-2">
+                  Posted on {question.timestamp}
                 </div>
-                
+
+                {/* Question Categories */}
+                <div className="flex gap-2 mb-4">
+                  {question.categories.map(cat => (
+                    <span key={cat} className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                      <Icons.Tag />
+                      <span className="ml-1">{cat}</span>
+                    </span>
+                  ))}
+                </div>
+
+                {/* Question Content */}
                 {question.content && (
                   <p className="text-gray-700 mb-4">{question.content}</p>
                 )}
                 {question.code && (
                   <pre className="bg-gray-100 p-4 rounded-lg overflow-x-auto mb-4">
-                    <code 
-                      className="text-sm"
-                      dangerouslySetInnerHTML={{ __html: formatCode(question.code) }}
-                    />
+                    <code className="text-sm">{question.code}</code>
                   </pre>
                 )}
 
-                {/* Answers */}
+                {/* Answers Section */}
                 <div className="mt-6">
                   <h3 className="text-lg font-semibold mb-4">
                     {question.answers.length} Answers
                   </h3>
+                  
+                  {/* Answers List */}
                   <div className="space-y-4">
                     {question.answers.map(answer => (
                       <div key={answer.id} className="pl-4 border-l-2 border-gray-200">
-                        <div className="flex items-start justify-between">
-                          <div className="flex-1">
-                            <div className="text-sm text-gray-500 mb-2">
-                              Answered on {answer.timestamp}
-                            </div>
-                            <p className="text-gray-700 mb-2">{answer.content}</p>
-                            {answer.code && (
-                              <pre className="bg-gray-100 p-4 rounded-lg overflow-x-auto mb-2">
-                                <code 
-                                  className="text-sm"
-                                  dangerouslySetInnerHTML={{ __html: formatCode(answer.code) }}
-                                />
-                              </pre>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <button
-                              onClick={() => handleVote(question.id, answer.id, true)}
-                              className="text-gray-500 hover:text-blue-500"
-                            >
-                              <ThumbsUp className="w-5 h-5" />
-                            </button>
-                            <span className="text-sm font-medium">{answer.votes}</span>
-                          </div>
+                        <div className="text-sm text-gray-500 mb-2">
+                          Answered on {answer.timestamp}
                         </div>
+                        <p className="text-gray-700 mb-2">{answer.content}</p>
+                        {answer.code && (
+                          <pre className="bg-gray-100 p-4 rounded-lg overflow-x-auto mb-2">
+                            <code className="text-sm">{answer.code}</code>
+                          </pre>
+                        )}
                       </div>
                     ))}
                   </div>
