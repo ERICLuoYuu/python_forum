@@ -26,18 +26,11 @@ jobs:
         with:
           node-version: '18'
 
-      - name: Create package-lock.json
-        run: |
-          npm install --package-lock-only
-          git add package-lock.json
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git config --global user.name "github-actions[bot]"
-          git commit -m "Add package-lock.json" || echo "No changes to commit"
-
       - name: Install dependencies
         run: |
-          npm ci
-          npm install -D tailwindcss postcss autoprefixer
+          rm -f package-lock.json
+          npm install
+          npm install -D tailwindcss@latest postcss@latest autoprefixer@latest
           npx tailwindcss init -p
 
       - name: Build
