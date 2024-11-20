@@ -28,9 +28,9 @@ jobs:
 
       - name: Install dependencies
         run: |
+          rm -f package-lock.json
           npm install
-          npm install @babel/plugin-proposal-private-property-in-object --save-dev
-          npm install -D tailwindcss postcss autoprefixer
+          npm install -D tailwindcss@latest postcss@latest autoprefixer@latest
           npx tailwindcss init -p
 
       - name: Build
