@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react';
+import { UserProvider } from './contexts/UserContext';
+import Forum from './components/Forum';  // We'll split the forum into its own component
 
 // Simple SVG Icons
 const Icons = {
