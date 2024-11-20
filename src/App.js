@@ -1,219 +1,306 @@
-import React, { useState, useEffect, createContext, useContext } from 'react';
+import React, { useState, useEffect } from 'react';
 
-// Create User Context
-const UserContext = createContext();
-
-// Mock users database
-const USERS = {
-  'tutor1@example.com': { role: 'tutor', name: 'Tutor One', password: 'tutor123' },
-  'tutor2@example.com': { role: 'tutor', name: 'Tutor Two', password: 'tutor123' },
-  'student1@example.com': { role: 'student', name: 'Student One', password: 'student123' },
-  'student2@example.com': { role: 'student', name: 'Student Two', password: 'student123' }
+// Simple SVG Icons
+const Icons = {
+  Search: () => (
+    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+    </svg>
+  ),
+  Delete: () => (
+    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+    </svg>
+  )
 };
 
-// Custom hook for User Context
-const useUser = () => useContext(UserContext);
-
-// User Provider Component
-function UserProvider({ children }) {
-  const [activeUsers, setActiveUsers] = useState(() => {
-    const saved = localStorage.getItem('activeUsers');
-    return saved ? JSON.parse(saved) : [];
+function App() {
+  // Initialize state from localStorage if available
+  const [questions, setQuestions] = useState(() => {
+    const savedQuestions = localStorage.getItem('pythonForumQuestions');
+    return savedQuestions ? JSON.parse(savedQuestions) : [];
+  });
+  
+  const [showNewQuestion, setShowNewQuestion] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [newQuestion, setNewQuestion] = useState({
+    title: '',
+    content: '',
+    code: ''
   });
 
+  // Save questions to localStorage whenever they change
   useEffect(() => {
-    localStorage.setItem('activeUsers', JSON.stringify(activeUsers));
-  }, [activeUsers]);
+    localStorage.setItem('pythonForumQuestions', JSON.stringify(questions));
+  }, [questions]);
 
-  const login = (email, password) => {
-    const userInfo = USERS[email];
-    if (!userInfo) throw new Error('User not found');
-    if (userInfo.password !== password) throw new Error('Invalid password');
-
-    if (!activeUsers.find(u => u.email === email)) {
-      const newUser = {
-        email,
-        name: userInfo.name,
-        role: userInfo.role,
-        loginTime: new Date().toISOString()
-      };
-      setActiveUsers([...activeUsers, newUser]);
-    }
-
-    return { email, name: userInfo.name, role: userInfo.role };
-  };
-
-  const logout = (email) => {
-    setActiveUsers(activeUsers.filter(u => u.email !== email));
-  };
-
-  const value = {
-    login,
-    logout,
-    activeUsers,
-    getActiveUsers: () => activeUsers
-  };
-
-  return (
-    <UserContext.Provider value={value}>
-      {children}
-    </UserContext.Provider>
-  );
-}
-
-function ActiveUsers() {
-  const { activeUsers } = useUser();
-
-  return (
-    <div className="bg-white shadow rounded-lg p-4">
-      <h2 className="text-lg font-semibold mb-2">Active Users</h2>
-      <div className="space-y-2">
-        {activeUsers.map(user => (
-          <div 
-            key={user.email}
-            className={`flex items-center gap-2 ${
-              user.role === 'tutor' ? 'text-blue-600' : 'text-gray-600'
-            }`}
-          >
-            <span className="w-2 h-2 rounded-full bg-green-500"></span>
-            <span>{user.name}</span>
-            <span className="text-sm text-gray-400">({user.role})</span>
-          </div>
-        ))}
-        {activeUsers.length === 0 && (
-          <p className="text-gray-500 text-sm">No active users</p>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function Forum() {
-  const { login, logout } = useUser();
-  const [user, setUser] = useState(null);
-  const [questions, setQuestions] = useState([]);
-  const [showLogin, setShowLogin] = useState(false);
-  const [loginForm, setLoginForm] = useState({ email: '', password: '' });
-
-  const handleLogin = async (e) => {
+  // Handle question submission
+  const handleSubmitQuestion = (e) => {
     e.preventDefault();
-    try {
-      const userInfo = await login(loginForm.email, loginForm.password);
-      setUser(userInfo);
-      setShowLogin(false);
-      setLoginForm({ email: '', password: '' });
-    } catch (error) {
-      alert(error.message);
+    if (newQuestion.title && (newQuestion.content || newQuestion.code)) {
+      const question = {
+        id: Date.now(),
+        ...newQuestion,
+        timestamp: new Date().toLocaleString(),
+        answers: []
+      };
+      setQuestions([question, ...questions]);
+      setNewQuestion({ title: '', content: '', code: '' });
+      setShowNewQuestion(false);
     }
   };
 
-  const handleLogout = () => {
-    if (user) {
-      logout(user.email);
-      setUser(null);
+  // Handle question deletion
+  const handleDeleteQuestion = (questionId) => {
+    if (window.confirm('Are you sure you want to delete this question?')) {
+      setQuestions(questions.filter(q => q.id !== questionId));
     }
   };
+
+  // Handle answer submission
+  const handleSubmitAnswer = (questionId, answerContent, answerCode) => {
+    if (!answerContent.trim()) {
+      alert('Answer content cannot be empty');
+      return;
+    }
+    
+    setQuestions(questions.map(q => {
+      if (q.id === questionId) {
+        return {
+          ...q,
+          answers: [...q.answers, {
+            id: Date.now(),
+            content: answerContent,
+            code: answerCode,
+            timestamp: new Date().toLocaleString()
+          }]
+        };
+      }
+      return q;
+    }));
+  };
+
+  // Handle answer deletion
+  const handleDeleteAnswer = (questionId, answerId) => {
+    if (window.confirm('Are you sure you want to delete this answer?')) {
+      setQuestions(questions.map(q => {
+        if (q.id === questionId) {
+          return {
+            ...q,
+            answers: q.answers.filter(a => a.id !== answerId)
+          };
+        }
+        return q;
+      }));
+    }
+  };
+
+  // Filter questions based on search
+  const filteredQuestions = questions.filter(q => 
+    q.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    q.content.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    q.code.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
   return (
     <div className="min-h-screen bg-gray-100 p-8">
-      <div className="max-w-6xl mx-auto">
-        <div className="flex justify-between items-center mb-8">
-          <h1 className="text-3xl font-bold">Python Q&A Forum</h1>
-          <div>
-            {user ? (
-              <div className="flex items-center gap-4">
-                <span>Welcome, {user.name}</span>
-                <button
-                  onClick={handleLogout}
-                  className="text-red-600 hover:text-red-800"
-                >
-                  Logout
-                </button>
-              </div>
-            ) : (
-              <button
-                onClick={() => setShowLogin(true)}
-                className="text-blue-600 hover:text-blue-800"
-              >
-                Login
-              </button>
-            )}
+      <div className="max-w-4xl mx-auto">
+        {/* Header */}
+        <h1 className="text-3xl font-bold text-gray-900 mb-8">
+          Python Q&A Forum
+        </h1>
+
+        {/* Search Bar */}
+        <div className="mb-6 flex gap-4">
+          <div className="flex-1 relative">
+            <span className="absolute left-3 top-3 text-gray-400">
+              <Icons.Search />
+            </span>
+            <input
+              type="text"
+              placeholder="Search python questions..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 border rounded-lg"
+            />
           </div>
+          <button
+            onClick={() => setShowNewQuestion(true)}
+            className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600"
+          >
+            Ask a Question
+          </button>
         </div>
 
-        <div className="grid grid-cols-4 gap-6">
-          <div className="col-span-1">
-            <ActiveUsers />
-          </div>
-          <div className="col-span-3">
-            {!user ? (
-              <div className="bg-white rounded-lg p-6 shadow">
-                <p>Please log in to participate in discussions.</p>
-              </div>
-            ) : (
-              <div>
-                {/* Forum content goes here */}
-                <p>Forum content will be added here</p>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Login Modal */}
-      {showLogin && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
-          <div className="bg-white p-6 rounded-lg w-96">
-            <h2 className="text-xl font-bold mb-4">Login</h2>
-            <form onSubmit={handleLogin}>
+        {/* New Question Form */}
+        {showNewQuestion && (
+          <div className="bg-white shadow rounded-lg p-6 mb-6">
+            <h2 className="text-xl font-semibold mb-4">Ask a Python Question</h2>
+            <form onSubmit={handleSubmitQuestion}>
               <div className="mb-4">
-                <label className="block text-sm font-medium mb-1">Email</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Question Title
+                </label>
                 <input
-                  type="email"
-                  value={loginForm.email}
-                  onChange={(e) => setLoginForm({...loginForm, email: e.target.value})}
-                  className="w-full p-2 border rounded"
+                  type="text"
+                  value={newQuestion.title}
+                  onChange={(e) => setNewQuestion({...newQuestion, title: e.target.value})}
+                  className="w-full px-3 py-2 border rounded-md"
+                  placeholder="What's your Python question?"
                   required
                 />
               </div>
+
               <div className="mb-4">
-                <label className="block text-sm font-medium mb-1">Password</label>
-                <input
-                  type="password"
-                  value={loginForm.password}
-                  onChange={(e) => setLoginForm({...loginForm, password: e.target.value})}
-                  className="w-full p-2 border rounded"
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Description
+                </label>
+                <textarea
+                  value={newQuestion.content}
+                  onChange={(e) => setNewQuestion({...newQuestion, content: e.target.value})}
+                  className="w-full px-3 py-2 border rounded-md"
+                  rows="3"
+                  placeholder="Describe your question in detail..."
                   required
                 />
               </div>
-              <div className="flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setShowLogin(false)}
-                  className="px-4 py-2 text-gray-600 hover:text-gray-800"
-                >
-                  Cancel
-                </button>
+
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Code (optional)
+                </label>
+                <textarea
+                  value={newQuestion.code}
+                  onChange={(e) => setNewQuestion({...newQuestion, code: e.target.value})}
+                  className="w-full px-3 py-2 border rounded-md font-mono text-sm"
+                  rows="5"
+                  placeholder="Share your Python code here..."
+                />
+              </div>
+
+              <div className="flex gap-2">
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+                  className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600"
                 >
-                  Login
+                  Submit Question
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowNewQuestion(false)}
+                  className="bg-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-400"
+                >
+                  Cancel
                 </button>
               </div>
             </form>
           </div>
-        </div>
-      )}
-    </div>
-  );
-}
+        )}
 
-function App() {
-  return (
-    <UserProvider>
-      <Forum />
-    </UserProvider>
+        {/* Questions List */}
+        <div className="space-y-4">
+          {filteredQuestions.length === 0 ? (
+            <div className="bg-white shadow rounded-lg p-6">
+              <p className="text-gray-600">
+                {searchTerm
+                  ? 'No questions found matching your search.'
+                  : 'Welcome to the Python Q&A Forum. Ask your first question!'}
+              </p>
+            </div>
+          ) : (
+            filteredQuestions.map(question => (
+              <div key={question.id} className="bg-white shadow rounded-lg p-6">
+                <div className="flex justify-between items-start mb-2">
+                  <h2 className="text-xl font-semibold">{question.title}</h2>
+                  <button
+                    onClick={() => handleDeleteQuestion(question.id)}
+                    className="text-red-500 hover:text-red-700 p-1"
+                    title="Delete question"
+                  >
+                    <Icons.Delete />
+                  </button>
+                </div>
+                <div className="text-sm text-gray-500 mb-4">
+                  Posted on {question.timestamp}
+                </div>
+
+                {question.content && (
+                  <p className="text-gray-700 mb-4">{question.content}</p>
+                )}
+                {question.code && (
+                  <pre className="bg-gray-100 p-4 rounded-lg overflow-x-auto mb-4">
+                    <code className="text-sm">{question.code}</code>
+                  </pre>
+                )}
+
+                {/* Answers Section */}
+                <div className="mt-6">
+                  <h3 className="text-lg font-semibold mb-4">
+                    {question.answers.length} Answers
+                  </h3>
+                  
+                  <div className="space-y-4">
+                    {question.answers.map(answer => (
+                      <div key={answer.id} className="pl-4 border-l-2 border-gray-200">
+                        <div className="flex justify-between items-start">
+                          <div className="text-sm text-gray-500 mb-2">
+                            Answered on {answer.timestamp}
+                          </div>
+                          <button
+                            onClick={() => handleDeleteAnswer(question.id, answer.id)}
+                            className="text-red-500 hover:text-red-700 p-1"
+                            title="Delete answer"
+                          >
+                            <Icons.Delete />
+                          </button>
+                        </div>
+                        <p className="text-gray-700 mb-2">{answer.content}</p>
+                        {answer.code && (
+                          <pre className="bg-gray-100 p-4 rounded-lg overflow-x-auto mb-2">
+                            <code className="text-sm">{answer.code}</code>
+                          </pre>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Add Answer Form */}
+                  <div className="mt-4">
+                    <h4 className="text-md font-semibold mb-2">Add an Answer</h4>
+                    <textarea
+                      placeholder="Write your answer..."
+                      className="w-full px-3 py-2 border rounded-md mb-2"
+                      rows="3"
+                      id={`answer-content-${question.id}`}
+                    />
+                    <textarea
+                      placeholder="Add Python code (optional)..."
+                      className="w-full px-3 py-2 border rounded-md mb-2 font-mono text-sm"
+                      rows="3"
+                      id={`answer-code-${question.id}`}
+                    />
+                    <button
+                      onClick={() => {
+                        const content = document.getElementById(`answer-content-${question.id}`).value;
+                        const code = document.getElementById(`answer-code-${question.id}`).value;
+                        if (content) {
+                          handleSubmitAnswer(question.id, content, code);
+                          document.getElementById(`answer-content-${question.id}`).value = '';
+                          document.getElementById(`answer-code-${question.id}`).value = '';
+                        }
+                      }}
+                      className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600"
+                    >
+                      Submit Answer
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+    </div>
   );
 }
 
