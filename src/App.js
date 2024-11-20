@@ -22,8 +22,7 @@ const Icons = {
 // Mock users for demonstration
 const USERS = {
   'tutor@example.com': { role: 'tutor', password: 'tutor123' },
-  'student1@example.com': { role: 'student', password: 'student123' },
-  'student2@example.com': { role: 'student', password: 'student123' }
+  'student@example.com': { role: 'student', password: 'student123' }
 };
 
 function App() {
@@ -49,11 +48,12 @@ function App() {
     code: ''
   });
 
-  // Save data to localStorage
+  // Save questions to localStorage
   useEffect(() => {
     localStorage.setItem('pythonForumQuestions', JSON.stringify(questions));
   }, [questions]);
 
+  // Save user to localStorage
   useEffect(() => {
     localStorage.setItem('currentUser', JSON.stringify(user));
   }, [user]);
@@ -97,7 +97,7 @@ function App() {
     }
   };
 
-  // Handle question deletion (only by tutor)
+  // Handle question deletion
   const handleDeleteQuestion = (questionId) => {
     if (user?.role === 'tutor' && window.confirm('Are you sure you want to delete this question?')) {
       setQuestions(questions.filter(q => q.id !== questionId));
@@ -121,7 +121,7 @@ function App() {
             code: answerCode,
             authorEmail: user.email,
             timestamp: new Date().toLocaleString(),
-            isApproved: user.role === 'tutor' // Auto-approve if tutor
+            isApproved: user.role === 'tutor'
           }]
         };
       }
@@ -129,7 +129,7 @@ function App() {
     }));
   };
 
-  // Handle answer deletion (by tutor or answer author)
+  // Handle answer deletion
   const handleDeleteAnswer = (questionId, answerId, answerAuthorEmail) => {
     if ((user?.role === 'tutor' || user?.email === answerAuthorEmail) && 
         window.confirm('Are you sure you want to delete this answer?')) {
@@ -145,7 +145,7 @@ function App() {
     }
   };
 
-  // Handle answer approval (only by tutor)
+  // Handle answer approval
   const handleApproveAnswer = (questionId, answerId) => {
     if (user?.role === 'tutor') {
       setQuestions(questions.map(q => {
@@ -162,78 +162,23 @@ function App() {
     }
   };
 
-  // Filter questions based on search
+  // Filter questions
   const filteredQuestions = questions.filter(q => 
     q.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    q.content.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    q.code.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-
-  // Login form component
-  const LoginForm = () => (
-    <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center">
-      <div className="bg-white p-6 rounded-lg shadow-lg">
-        <h2 className="text-xl font-semibold mb-4">Login</h2>
-        <form onSubmit={handleLogin}>
-          <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Email
-            </label>
-            <input
-              type="email"
-              value={loginForm.email}
-              onChange={(e) => setLoginForm({...loginForm, email: e.target.value})}
-              className="w-full px-3 py-2 border rounded-md"
-              required
-            />
-          </div>
-          <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Password
-            </label>
-            <input
-              type="password"
-              value={loginForm.password}
-              onChange={(e) => setLoginForm({...loginForm, password: e.target.value})}
-              className="w-full px-3 py-2 border rounded-md"
-              required
-            />
-          </div>
-          <div className="flex gap-2">
-            <button
-              type="submit"
-              className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600"
-            >
-              Login
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowLogin(false)}
-              className="bg-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-400"
-            >
-              Cancel
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+    q.content.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   return (
     <div className="min-h-screen bg-gray-100 p-8">
-      {showLogin && <LoginForm />}
-      
       <div className="max-w-4xl mx-auto">
         {/* Header with Auth */}
         <div className="flex justify-between items-center mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">
-            Python Q&A Forum
-          </h1>
-          <div className="flex items-center gap-4">
+          <h1 className="text-3xl font-bold text-gray-900">Python Q&A Forum</h1>
+          <div>
             {user ? (
-              <>
+              <div className="flex items-center gap-4">
                 <span className="text-sm text-gray-600">
-                  Logged in as {user.email} ({user.role})
+                  {user.email} ({user.role})
                 </span>
                 <button
                   onClick={handleLogout}
@@ -241,7 +186,7 @@ function App() {
                 >
                   Logout
                 </button>
-              </>
+              </div>
             ) : (
               <button
                 onClick={() => setShowLogin(true)}
@@ -253,7 +198,56 @@ function App() {
           </div>
         </div>
 
-        {/* Main Content */}
+        {/* Login Modal */}
+        {showLogin && (
+          <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center">
+            <div className="bg-white p-6 rounded-lg shadow-lg">
+              <h2 className="text-xl font-semibold mb-4">Login</h2>
+              <form onSubmit={handleLogin}>
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Email
+                  </label>
+                  <input
+                    type="email"
+                    value={loginForm.email}
+                    onChange={(e) => setLoginForm({...loginForm, email: e.target.value})}
+                    className="w-full px-3 py-2 border rounded-md"
+                    required
+                  />
+                </div>
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Password
+                  </label>
+                  <input
+                    type="password"
+                    value={loginForm.password}
+                    onChange={(e) => setLoginForm({...loginForm, password: e.target.value})}
+                    className="w-full px-3 py-2 border rounded-md"
+                    required
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    type="submit"
+                    className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600"
+                  >
+                    Login
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowLogin(false)}
+                    className="bg-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-400"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
         {user ? (
           <>
             {/* Search and Ask Question */}
@@ -278,7 +272,7 @@ function App() {
               </button>
             </div>
 
-            {/* Question Form */}
+            {/* New Question Form */}
             {showNewQuestion && (
               <div className="bg-white shadow rounded-lg p-6 mb-6">
                 <h2 className="text-xl font-semibold mb-4">Ask a Python Question</h2>
@@ -339,54 +333,45 @@ function App() {
 
             {/* Questions List */}
             <div className="space-y-4">
-              {filteredQuestions.length === 0 ? (
-                <div className="bg-white shadow rounded-lg p-6">
-                  <p className="text-gray-600">
-                    {searchTerm
-                      ? 'No questions found matching your search.'
-                      : 'Welcome to the Python Q&A Forum. Ask your first question!'}
-                  </p>
-                </div>
-              ) : (
-                filteredQuestions.map(question => (
-                  <div key={question.id} className="bg-white shadow rounded-lg p-6">
-                    <div className="flex justify-between items-start mb-2">
-                      <div>
-                        <h2 className="text-xl font-semibold">{question.title}</h2>
-                        <div className="text-sm text-gray-500">
-                          Posted by {question.authorEmail} on {question.timestamp}
-                        </div>
+              {filteredQuestions.map(question => (
+                <div key={question.id} className="bg-white shadow rounded-lg p-6">
+                  <div className="flex justify-between items-start mb-2">
+                    <div>
+                      <h2 className="text-xl font-semibold">{question.title}</h2>
+                      <div className="text-sm text-gray-500">
+                        Posted by {question.authorEmail} on {question.timestamp}
                       </div>
-                      {user.role === 'tutor' && (
-                        <button
-                          onClick={() => handleDeleteQuestion(question.id)}
-                          className="text-red-500 hover:text-red-700 p-1"
-                          title="Delete question"
-                        >
-                          <Icons.Delete />
-                        </button>
-                      )}
                     </div>
-
-                    {question.content && (
-                      <p className="text-gray-700 mb-4">{question.content}</p>
+                    {user.role === 'tutor' && (
+                      <button
+                        onClick={() => handleDeleteQuestion(question.id)}
+                        className="text-red-500 hover:text-red-700 p-1"
+                        title="Delete question"
+                      >
+                        <Icons.Delete />
+                      </button>
                     )}
-                    {question.code && (
-                      <pre className="bg-gray-100 p-4 rounded-lg overflow-x-auto mb-4">
-                        <code className="text-sm">{question.code}</code>
-                      </pre>
-                    )}
+                  </div>
 
-                    {/* Answers Section */}
-                    <div className="mt-6">
-                      <h3 className="text-lg font-semibold mb-4">
-                        {question.answers.filter(a => a.isApproved || user.role === 'tutor').length} Answers
-                      </h3>
-                      
-                      <div className="space-y-4">
-                        {question.answers
-                          .filter(a => a.isApproved || user.role === 'tutor')
-                          .map(answer => (
+                  {question.content && (
+                    <p className="text-gray-700 mb-4">{question.content}</p>
+                  )}
+                  {question.code && (
+                    <pre className="bg-gray-100 p-4 rounded-lg overflow-x-auto mb-4">
+                      <code className="text-sm">{question.code}</code>
+                    </pre>
+                  )}
+
+                  {/* Answers Section */}
+                  <div className="mt-6">
+                    <h3 className="text-lg font-semibold mb-4">
+                      {question.answers.filter(a => a.isApproved || user.role === 'tutor').length} Answers
+                    </h3>
+                    
+                    <div className="space-y-4">
+                      {question.answers
+                        .filter(a => a.isApproved || user.role === 'tutor')
+                        .map(answer => (
                           <div key={answer.id} className="pl-4 border-l-2 border-gray-200">
                             <div className="flex justify-between items-start">
                               <div>
@@ -394,22 +379,14 @@ function App() {
                                   Answered by {answer.authorEmail} on {answer.timestamp}
                                 </div>
                                 {!answer.isApproved && user.role === 'tutor' && (
-                                  <div className="mb-2">
-                                    <span className="text-orange-500 text-sm font-medium">
-                                      Pending Approval
-                                    </span>
+                                  <div className="flex items-center mb-2">
+                                    <span className="text-orange-500 text-sm">Pending Approval</span>
                                     <button
                                       onClick={() => handleApproveAnswer(question.id, answer.id)}
                                       className="ml-2 text-green-500 hover:text-green-700"
-                                      title="Approve answer"
                                     >
                                       <Icons.Check />
                                     </button>
-                                  </div>
-                                )}
-                                {answer.isApproved && (
-                                  <div className="text-green-500 text-sm font-medium mb-2">
-                                    ✓ Approved
                                   </div>
                                 )}
                               </div>
@@ -431,41 +408,50 @@ function App() {
                             )}
                           </div>
                         ))}
-                      </div>
+                    </div>
 
-                      {/* Add Answer Form */}
-                      <div className="mt-4">
-                        <h4 className="text-md font-semibold mb-2">Add an Answer</h4>
-                        <textarea
-                          placeholder="Write your answer..."
-                          className="w-full px-3 py-2 border rounded-md mb-2"
-                          rows="3"
-                          id={`answer-content-${question.id}`}
-                        />
-                        <textarea
-                          placeholder="Add Python code (optional)..."
-                          className="w-full px-3 py-2 border rounded-md mb-2 font-mono text-sm"
-                          rows="3"
-                          id={`answer-code-${question.id}`}
-                        />
-                        <button
-                          onClick={() => {
-                            const content = document.getElementById(`answer-content-${question.id}`).value;
-                            const code = document.getElementById(`answer-code-${question.id}`).value;
-                            if (content) {
-                              handleSubmitAnswer(question.id, content, code);
-                              document.getElementById(`answer-content-${question.id}`).value = '';
-                              document.getElementById(`answer-code-${question.id}`).value = '';
-                            }
-                          }}
-                          className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600"
-                        >
-                          Submit Answer
-                        </button>
-                      </div>
+                    {/* Add Answer Form */}
+                    <div className="mt-4">
+                      <h4 className="text-md font-semibold mb-2">Add an Answer</h4>
+                      <textarea
+                        placeholder="Write your answer..."
+                        className="w-full px-3 py-2 border rounded-md mb-2"
+                        rows="3"
+                        id={`answer-content-${question.id}`}
+                      />
+                      <textarea
+                        placeholder="Add Python code (optional)..."
+                        className="w-full px-3 py-2 border rounded-md mb-2 font-mono text-sm"
+                        rows="3"
+                        id={`answer-code-${question.id}`}
+                      />
+                      <button
+                        onClick={() => {
+                          const content = document.getElementById(`answer-content-${question.id}`).value;
+                          const code = document.getElementById(`answer-code-${question.id}`).value;
+                          if (content) {
+                            handleSubmitAnswer(question.id, content, code);
+                            document.getElementById(`answer-content-${question.id}`).value = '';
+                            document.getElementById(`answer-code-${question.id}`).value = '';
+                          }
+                        }}
+                        className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600"
+                      >
+                        Submit Answer
+                      </button>
                     </div>
                   </div>
-                ))
+                </div>
+              ))}
+              
+              {filteredQuestions.length === 0 && (
+                <div className="bg-white shadow rounded-lg p-6">
+                  <p className="text-gray-600 text-center">
+                    {searchTerm
+                      ? 'No questions found matching your search.'
+                      : 'Welcome to the Python Q&A Forum. Ask your first question!'}
+                  </p>
+                </div>
               )}
             </div>
           </>
