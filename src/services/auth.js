@@ -1,59 +1,38 @@
-import { initializeApp } from 'firebase/app';
-import { 
-  getAuth, 
-  createUserWithEmailAndPassword,
-  signInWithEmailAndPassword,
-  sendPasswordResetEmail,
-  sendEmailVerification
-} from 'firebase/auth';
+import React, { createContext, useContext, useState, useEffect } from 'react';
 
-// Your Firebase config
-const firebaseConfig = {
-  // Replace with your Firebase config
-  apiKey: "your-api-key",
-  authDomain: "your-auth-domain",
-  projectId: "your-project-id",
-  storageBucket: "your-storage-bucket",
-  messagingSenderId: "your-messaging-sender-id",
-  appId: "your-app-id"
-};
+const NotificationContext = createContext();
 
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
+export function NotificationProvider({ children }) {
+  const [notifications, setNotifications] = useState([]);
 
-export const signUp = async (email, password, role) => {
-  try {
-    const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-    await sendEmailVerification(userCredential.user);
-    // Store user role in your database
-    return userCredential.user;
-  } catch (error) {
-    throw error;
-  }
-};
+  const addNotification = (message, type = 'info') => {
+    const id = Date.now();
+    setNotifications(prev => [...prev, { id, message, type }]);
+    setTimeout(() => {
+      setNotifications(prev => prev.filter(n => n.id !== id));
+    }, 5000);
+  };
 
-export const signIn = async (email, password) => {
-  try {
-    const userCredential = await signInWithEmailAndPassword(auth, email, password);
-    return userCredential.user;
-  } catch (error) {
-    throw error;
-  }
-};
+  return (
+    <NotificationContext.Provider value={{ notifications, addNotification }}>
+      {children}
+      <div className="fixed bottom-4 right-4 space-y-2">
+        {notifications.map(({ id, message, type }) => (
+          <div
+            key={id}
+            className={`p-4 rounded-lg shadow-lg ${
+              type === 'success' ? 'bg-green-500' :
+              type === 'error' ? 'bg-red-500' :
+              type === 'warning' ? 'bg-yellow-500' :
+              'bg-blue-500'
+            } text-white`}
+          >
+            {message}
+          </div>
+        ))}
+      </div>
+    </NotificationContext.Provider>
+  );
+}
 
-export const resetPassword = async (email) => {
-  try {
-    await sendPasswordResetEmail(auth, email);
-  } catch (error) {
-    throw error;
-  }
-};
-
-export const verifyEmail = async (oobCode) => {
-  try {
-    await auth.applyActionCode(oobCode);
-  } catch (error) {
-    throw error;
-  }
-};
+export const useNotification = () => useContext(NotificationContext);
