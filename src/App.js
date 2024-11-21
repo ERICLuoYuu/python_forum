@@ -20,11 +20,21 @@ const parseIssueBody = (body) => {
 };
 
 // Create headers with authentication
-const createHeaders = () => ({
-  'Accept': 'application/vnd.github.v3+json',
-  'Authorization': `token ${process.env.REACT_APP_GH_TOKEN}`,
-  'Content-Type': 'application/json',
-});
+const createHeaders = () => {
+    const headers = {
+      'Accept': 'application/vnd.github.v3+json',
+      'Content-Type': 'application/json',
+    };
+
+    const token = process.env.REACT_APP_GH_TOKEN;
+    if (token) {
+      headers['Authorization'] = `token ${token}`;
+    } else {
+      console.warn('GitHub token is not set!');
+    }
+
+    return headers;
+  };
 
 // Simple SVG Icons
 const Icons = {
@@ -147,8 +157,20 @@ function App() {
   // Handle question submission
   const handleSubmitQuestion = async (e) => {
     e.preventDefault();
+    if (!newQuestion.title.trim() || !newQuestion.content.trim()) {
+      alert('Title and description are required!');
+      return;
+    }
+
     try {
       setLoading(true);
+      setError(null);
+
+      console.log('Submitting question:', {
+        title: newQuestion.title,
+        body: formatIssueBody(newQuestion.content, newQuestion.code)
+      });
+
       const response = await fetch(
         `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/issues`,
         {
@@ -166,13 +188,29 @@ function App() {
         throw new Error(errorData.message || 'Failed to create question');
       }
 
-      await fetchQuestions();
+      const newIssue = await response.json();
+      console.log('New issue created:', newIssue);
+
+      // Add the new question to the state immediately
+      const newQuestionData = {
+        id: newIssue.number,
+        title: newIssue.title,
+        content: newQuestion.content,
+        code: newQuestion.code,
+        timestamp: new Date(newIssue.created_at).toLocaleString(),
+        answers: []
+      };
+
+      setQuestions(prevQuestions => [newQuestionData, ...prevQuestions]);
       setNewQuestion({ title: '', content: '', code: '' });
       setShowNewQuestion(false);
       alert('Question posted successfully!');
+
+      // Refresh the questions list to ensure everything is in sync
+      await fetchQuestions();
     } catch (err) {
+      console.error('Error posting question:', err);
       setError('Failed to post question: ' + err.message);
-      console.error(err);
     } finally {
       setLoading(false);
     }
