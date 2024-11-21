@@ -4,6 +4,21 @@ import React, { useState, useEffect } from 'react';
 const GITHUB_OWNER = 'ERICLuoYuu';
 const GITHUB_REPO = 'student-qa-forum';
 
+// Utility functions
+const formatIssueBody = (content, code) => {
+  return `${content}\n\n${code ? `\`\`\`python\n${code}\n\`\`\`` : ''}`;
+};
+
+const parseIssueBody = (body) => {
+  if (!body) return { content: '', code: '' };
+  
+  const codeMatch = body.match(/```python\n([\s\S]*?)```/);
+  const code = codeMatch ? codeMatch[1].trim() : '';
+  const content = body.replace(/```python\n[\s\S]*?```/, '').trim();
+  
+  return { content, code };
+};
+
 // Simple SVG Icons
 const Icons = {
   Search: () => (
@@ -84,7 +99,11 @@ function App() {
     }
   };
 
-  // Post a new question as a GitHub issue
+  useEffect(() => {
+    fetchQuestions();
+  }, []);
+
+  // Handle question submission
   const handleSubmitQuestion = async (e) => {
     e.preventDefault();
     try {
@@ -94,8 +113,7 @@ function App() {
         {
           method: 'POST',
           headers: {
-            'Authorization': `token ${GITHUB_TOKEN}`,
-            'Accept': 'application/vnd.github.v3+json'
+            'Accept': 'application/vnd.github.v3+json',
           },
           body: JSON.stringify({
             title: newQuestion.title,
@@ -108,57 +126,18 @@ function App() {
         throw new Error('Failed to create question');
       }
 
-      await fetchQuestions(); // Refresh questions
+      await fetchQuestions();
       setNewQuestion({ title: '', content: '', code: '' });
       setShowNewQuestion(false);
     } catch (err) {
-      setError('Failed to post question: ' + err.message);
+      setError('Failed to post question. Please try again.');
       console.error(err);
     } finally {
       setLoading(false);
     }
   };
 
-  // Handle delete question (close the issue)
-  const handleDeleteQuestion = async (questionId) => {
-    if (window.confirm('Are you sure you want to delete this question?')) {
-      try {
-        setLoading(true);
-        const response = await fetch(
-          `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/issues/${questionId}`,
-          {
-            method: 'PATCH',
-            headers: {
-              'Authorization': `token ${GITHUB_TOKEN}`,
-              'Accept': 'application/vnd.github.v3+json'
-            },
-            body: JSON.stringify({
-              state: 'closed'
-            })
-          }
-        );
-
-        if (!response.ok) {
-          throw new Error('Failed to delete question');
-        }
-
-        // Remove question from local state
-        setQuestions(prevQuestions => 
-          prevQuestions.filter(q => q.id !== questionId)
-        );
-
-        alert('Question successfully deleted');
-      } catch (err) {
-        setError('Failed to delete question: ' + err.message);
-        console.error(err);
-        await fetchQuestions(); // Refresh questions to ensure UI is in sync
-      } finally {
-        setLoading(false);
-      }
-    }
-  };
-
-  // Handle submit answer
+  // Handle answer submission
   const handleSubmitAnswer = async (questionId, answerContent, answerCode) => {
     if (!answerContent.trim()) {
       alert('Answer content cannot be empty');
@@ -172,8 +151,7 @@ function App() {
         {
           method: 'POST',
           headers: {
-            'Authorization': `token ${GITHUB_TOKEN}`,
-            'Accept': 'application/vnd.github.v3+json'
+            'Accept': 'application/vnd.github.v3+json',
           },
           body: JSON.stringify({
             body: formatIssueBody(answerContent, answerCode),
@@ -185,53 +163,43 @@ function App() {
         throw new Error('Failed to post answer');
       }
 
-      await fetchQuestions(); // Refresh questions
+      await fetchQuestions();
     } catch (err) {
-      setError('Failed to post answer: ' + err.message);
+      setError('Failed to post answer. Please try again.');
       console.error(err);
     } finally {
       setLoading(false);
     }
   };
 
-  // Handle delete answer
-  const handleDeleteAnswer = async (questionId, answerId) => {
-    if (window.confirm('Are you sure you want to delete this answer?')) {
+  // Handle question deletion
+  const handleDeleteQuestion = async (questionId) => {
+    if (window.confirm('Are you sure you want to delete this question?')) {
       try {
         setLoading(true);
         const response = await fetch(
-          `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/issues/comments/${answerId}`,
+          `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/issues/${questionId}`,
           {
-            method: 'DELETE',
+            method: 'PATCH',
             headers: {
-              'Authorization': `token ${GITHUB_TOKEN}`,
-              'Accept': 'application/vnd.github.v3+json'
-            }
+              'Accept': 'application/vnd.github.v3+json',
+            },
+            body: JSON.stringify({
+              state: 'closed'
+            })
           }
         );
 
         if (!response.ok) {
-          throw new Error('Failed to delete answer');
+          throw new Error('Failed to delete question');
         }
 
-        // Update local state
         setQuestions(prevQuestions => 
-          prevQuestions.map(q => {
-            if (q.id === questionId) {
-              return {
-                ...q,
-                answers: q.answers.filter(a => a.id !== answerId)
-              };
-            }
-            return q;
-          })
+          prevQuestions.filter(q => q.id !== questionId)
         );
-
-        alert('Answer successfully deleted');
       } catch (err) {
-        setError('Failed to delete answer: ' + err.message);
+        setError('Failed to delete question. Please try again.');
         console.error(err);
-        await fetchQuestions(); // Refresh questions to ensure UI is in sync
       } finally {
         setLoading(false);
       }
