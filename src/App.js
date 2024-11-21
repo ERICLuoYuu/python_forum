@@ -76,22 +76,10 @@ function App() {
   const fetchQuestions = async () => {
     try {
       setLoading(true);
-      setError(null); // Clear any previous errors
+      setError(null);
       
-      // First check if the repo exists and issues are enabled
-      const repoResponse = await fetch(
-        `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}`,
-        {
-          headers: createHeaders()
-        }
-      );
-
-      if (!repoResponse.ok) {
-        throw new Error('Repository not found or access denied');
-      }
-
       const response = await fetch(
-        `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/issues?state=open`,
+        `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/issues?state=open&sort=created&direction=desc`,
         {
           headers: createHeaders()
         }
@@ -100,52 +88,52 @@ function App() {
       if (!response.ok) {
         const errorData = await response.json();
         console.error('API Error:', errorData);
-        if (response.status === 404) {
-          throw new Error('Issues feature might be disabled. Please check repository settings.');
-        } else if (response.status === 401) {
-          throw new Error('Authentication failed. Please check your GitHub token.');
-        } else {
-          throw new Error(`GitHub API error: ${errorData.message || response.statusText}`);
-        }
+        throw new Error(`GitHub API error: ${errorData.message || response.statusText}`);
       }
 
       const issues = await response.json();
+      console.log('Fetched issues:', issues);
       
-      // Fetch comments for each issue
       const questionsWithAnswers = await Promise.all(issues.map(async (issue) => {
-        const commentsResponse = await fetch(
-          `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/issues/${issue.number}/comments`,
-          {
-            headers: createHeaders()
+        try {
+          const commentsResponse = await fetch(
+            `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/issues/${issue.number}/comments`,
+            {
+              headers: createHeaders()
+            }
+          );
+          
+          let comments = [];
+          if (commentsResponse.ok) {
+            comments = await commentsResponse.json();
+            console.log(`Fetched comments for issue ${issue.number}:`, comments);
+          } else {
+            console.warn(`Failed to fetch comments for issue ${issue.number}`);
           }
-        );
-        
-        if (!commentsResponse.ok) {
-          console.warn(`Failed to fetch comments for issue ${issue.number}`);
+
+          const { content, code } = parseIssueBody(issue.body);
           return {
             id: issue.number,
             title: issue.title,
-            ...parseIssueBody(issue.body),
+            content: content,
+            code: code,
             timestamp: new Date(issue.created_at).toLocaleString(),
-            answers: []
+            answers: comments.map(comment => ({
+              id: comment.id,
+              ...parseIssueBody(comment.body),
+              timestamp: new Date(comment.created_at).toLocaleString()
+            }))
           };
+        } catch (err) {
+          console.error(`Error processing issue ${issue.number}:`, err);
+          return null;
         }
-        
-        const comments = await commentsResponse.json();
-        return {
-          id: issue.number,
-          title: issue.title,
-          ...parseIssueBody(issue.body),
-          timestamp: new Date(issue.created_at).toLocaleString(),
-          answers: comments.map(comment => ({
-            id: comment.id,
-            ...parseIssueBody(comment.body),
-            timestamp: new Date(comment.created_at).toLocaleString()
-          }))
-        };
       }));
       
-      setQuestions(questionsWithAnswers);
+      // Filter out any null results from errors
+      const validQuestions = questionsWithAnswers.filter(q => q !== null);
+      console.log('Processed questions:', validQuestions);
+      setQuestions(validQuestions);
     } catch (err) {
       console.error('Fetch error:', err);
       setError(`Failed to load questions: ${err.message}`);
