@@ -1,5 +1,10 @@
 import React, { useState, useEffect } from 'react';
 
+// Replace these with your GitHub repository details
+const GITHUB_OWNER = 'ERICLuoYuu';
+const GITHUB_REPO = 'student-qa-forum';
+const GITHUB_TOKEN = process.env.REACT_APP_GITHUB_TOKEN;
+
 // Simple SVG Icons
 const Icons = {
   Search: () => (
@@ -11,16 +16,20 @@ const Icons = {
     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
     </svg>
+  ),
+  Loading: () => (
+    <svg className="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
+      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+    </svg>
   )
 };
 
 function App() {
-  // Initialize state from localStorage if available
-  const [questions, setQuestions] = useState(() => {
-    const savedQuestions = localStorage.getItem('pythonForumQuestions');
-    return savedQuestions ? JSON.parse(savedQuestions) : [];
-  });
-  
+  // State management
+  const [questions, setQuestions] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [showNewQuestion, setShowNewQuestion] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [newQuestion, setNewQuestion] = useState({
@@ -29,69 +38,185 @@ function App() {
     code: ''
   });
 
-  // Save questions to localStorage whenever they change
-  useEffect(() => {
-    localStorage.setItem('pythonForumQuestions', JSON.stringify(questions));
-  }, [questions]);
+  // Format the issue body with markdown
+  const formatIssueBody = (content, code) => {
+    return `${content}\n\n${code ? `\`\`\`python\n${code}\n\`\`\`` : ''}`;
+  };
 
-  // Handle question submission
-  const handleSubmitQuestion = (e) => {
+  // Parse the issue body to extract content and code
+  const parseIssueBody = (body) => {
+    if (!body) return { content: '', code: '' };
+    
+    const codeMatch = body.match(/```python\n([\s\S]*?)```/);
+    const code = codeMatch ? codeMatch[1].trim() : '';
+    const content = body.replace(/```python\n[\s\S]*?```/, '').trim();
+    
+    return { content, code };
+  };
+  // Fetch questions from GitHub Issues
+  useEffect(() => {
+    fetchQuestions();
+  }, []);
+
+  const fetchQuestions = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch(
+        `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/issues?state=all`,
+        {
+          headers: {
+            'Authorization': `token ${GITHUB_TOKEN}`,
+            'Accept': 'application/vnd.github.v3+json'
+          }
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch questions');
+      }
+
+      const issues = await response.json();
+      
+      // Fetch comments for each issue
+      const questionsWithAnswers = await Promise.all(issues.map(async (issue) => {
+        const commentsResponse = await fetch(
+          `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/issues/${issue.number}/comments`,
+          {
+            headers: {
+              'Authorization': `token ${GITHUB_TOKEN}`,
+              'Accept': 'application/vnd.github.v3+json'
+            }
+          }
+        );
+        
+        const comments = await commentsResponse.json();
+        const { content, code } = parseIssueBody(issue.body);
+        
+        return {
+          id: issue.number,
+          title: issue.title,
+          content: content,
+          code: code,
+          timestamp: new Date(issue.created_at).toLocaleString(),
+          answers: comments.map(comment => ({
+            id: comment.id,
+            ...parseIssueBody(comment.body),
+            timestamp: new Date(comment.created_at).toLocaleString()
+          }))
+        };
+      }));
+      
+      setQuestions(questionsWithAnswers);
+      setError(null);
+    } catch (err) {
+      setError('Failed to load questions: ' + err.message);
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Post a new question as a GitHub issue
+  const handleSubmitQuestion = async (e) => {
     e.preventDefault();
-    if (newQuestion.title && (newQuestion.content || newQuestion.code)) {
-      const question = {
-        id: Date.now(),
-        ...newQuestion,
-        timestamp: new Date().toLocaleString(),
-        answers: []
-      };
-      setQuestions([question, ...questions]);
+    try {
+      setLoading(true);
+      const response = await fetch(
+        `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/issues`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `token ${GITHUB_TOKEN}`,
+            'Accept': 'application/vnd.github.v3+json'
+          },
+          body: JSON.stringify({
+            title: newQuestion.title,
+            body: formatIssueBody(newQuestion.content, newQuestion.code),
+          })
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error('Failed to create question');
+      }
+
+      await fetchQuestions(); // Refresh questions
       setNewQuestion({ title: '', content: '', code: '' });
       setShowNewQuestion(false);
+    } catch (err) {
+      setError('Failed to post question: ' + err.message);
+      console.error(err);
+    } finally {
+      setLoading(false);
     }
   };
 
-  // Handle question deletion
-  const handleDeleteQuestion = (questionId) => {
-    if (window.confirm('Are you sure you want to delete this question?')) {
-      setQuestions(questions.filter(q => q.id !== questionId));
-    }
-  };
-
-  // Handle answer submission
-  const handleSubmitAnswer = (questionId, answerContent, answerCode) => {
+  // Post an answer as a comment on GitHub issue
+  const handleSubmitAnswer = async (questionId, answerContent, answerCode) => {
     if (!answerContent.trim()) {
       alert('Answer content cannot be empty');
       return;
     }
-    
-    setQuestions(questions.map(q => {
-      if (q.id === questionId) {
-        return {
-          ...q,
-          answers: [...q.answers, {
-            id: Date.now(),
-            content: answerContent,
-            code: answerCode,
-            timestamp: new Date().toLocaleString()
-          }]
-        };
+
+    try {
+      setLoading(true);
+      const response = await fetch(
+        `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/issues/${questionId}/comments`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `token ${GITHUB_TOKEN}`,
+            'Accept': 'application/vnd.github.v3+json'
+          },
+          body: JSON.stringify({
+            body: formatIssueBody(answerContent, answerCode),
+          })
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error('Failed to post answer');
       }
-      return q;
-    }));
+
+      await fetchQuestions(); // Refresh questions
+    } catch (err) {
+      setError('Failed to post answer: ' + err.message);
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  // Handle answer deletion
-  const handleDeleteAnswer = (questionId, answerId) => {
-    if (window.confirm('Are you sure you want to delete this answer?')) {
-      setQuestions(questions.map(q => {
-        if (q.id === questionId) {
-          return {
-            ...q,
-            answers: q.answers.filter(a => a.id !== answerId)
-          };
+  // Delete a question (close the GitHub issue)
+  const handleDeleteQuestion = async (questionId) => {
+    if (window.confirm('Are you sure you want to delete this question?')) {
+      try {
+        setLoading(true);
+        const response = await fetch(
+          `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/issues/${questionId}`,
+          {
+            method: 'PATCH',
+            headers: {
+              'Authorization': `token ${GITHUB_TOKEN}`,
+              'Accept': 'application/vnd.github.v3+json'
+            },
+            body: JSON.stringify({
+              state: 'closed'
+            })
+          }
+        );
+
+        if (!response.ok) {
+          throw new Error('Failed to delete question');
         }
-        return q;
-      }));
+
+        await fetchQuestions();
+      } catch (err) {
+        setError('Failed to delete question: ' + err.message);
+        console.error(err);
+      } finally {
+        setLoading(false);
+      }
     }
   };
 
@@ -101,7 +226,6 @@ function App() {
     q.content.toLowerCase().includes(searchTerm.toLowerCase()) ||
     q.code.toLowerCase().includes(searchTerm.toLowerCase())
   );
-
   return (
     <div className="min-h-screen bg-gray-100 p-8">
       <div className="max-w-4xl mx-auto">
@@ -110,7 +234,23 @@ function App() {
           Python Q&A Forum
         </h1>
 
-        {/* Search Bar */}
+        {/* Error Message */}
+        {error && (
+          <div className="bg-red-50 border-l-4 border-red-400 p-4 mb-6">
+            <div className="flex">
+              <div className="flex-shrink-0">
+                <svg className="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                </svg>
+              </div>
+              <div className="ml-3">
+                <p className="text-sm text-red-700">{error}</p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Search Bar and Ask Question Button */}
         <div className="mb-6 flex gap-4">
           <div className="flex-1 relative">
             <span className="absolute left-3 top-3 text-gray-400">
@@ -126,7 +266,8 @@ function App() {
           </div>
           <button
             onClick={() => setShowNewQuestion(true)}
-            className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600"
+            className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 transition-colors"
+            disabled={loading}
           >
             Ask a Question
           </button>
@@ -145,9 +286,10 @@ function App() {
                   type="text"
                   value={newQuestion.title}
                   onChange={(e) => setNewQuestion({...newQuestion, title: e.target.value})}
-                  className="w-full px-3 py-2 border rounded-md"
+                  className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                   placeholder="What's your Python question?"
                   required
+                  disabled={loading}
                 />
               </div>
 
@@ -158,10 +300,11 @@ function App() {
                 <textarea
                   value={newQuestion.content}
                   onChange={(e) => setNewQuestion({...newQuestion, content: e.target.value})}
-                  className="w-full px-3 py-2 border rounded-md"
+                  className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                   rows="3"
                   placeholder="Describe your question in detail..."
                   required
+                  disabled={loading}
                 />
               </div>
 
@@ -172,23 +315,27 @@ function App() {
                 <textarea
                   value={newQuestion.code}
                   onChange={(e) => setNewQuestion({...newQuestion, code: e.target.value})}
-                  className="w-full px-3 py-2 border rounded-md font-mono text-sm"
+                  className="w-full px-3 py-2 border rounded-md font-mono text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   rows="5"
                   placeholder="Share your Python code here..."
+                  disabled={loading}
                 />
               </div>
 
               <div className="flex gap-2">
                 <button
                   type="submit"
-                  className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600"
+                  className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 transition-colors flex items-center"
+                  disabled={loading}
                 >
-                  Submit Question
+                  {loading && <Icons.Loading />}
+                  <span className="ml-2">Submit Question</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => setShowNewQuestion(false)}
-                  className="bg-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-400"
+                  className="bg-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-400 transition-colors"
+                  disabled={loading}
                 >
                   Cancel
                 </button>
@@ -199,7 +346,12 @@ function App() {
 
         {/* Questions List */}
         <div className="space-y-4">
-          {filteredQuestions.length === 0 ? (
+          {loading && !questions.length ? (
+            <div className="flex justify-center items-center py-12">
+              <Icons.Loading />
+              <span className="ml-2">Loading questions...</span>
+            </div>
+          ) : filteredQuestions.length === 0 ? (
             <div className="bg-white shadow rounded-lg p-6">
               <p className="text-gray-600">
                 {searchTerm
@@ -214,8 +366,9 @@ function App() {
                   <h2 className="text-xl font-semibold">{question.title}</h2>
                   <button
                     onClick={() => handleDeleteQuestion(question.id)}
-                    className="text-red-500 hover:text-red-700 p-1"
+                    className="text-red-500 hover:text-red-700 p-1 transition-colors"
                     title="Delete question"
+                    disabled={loading}
                   >
                     <Icons.Delete />
                   </button>
@@ -225,7 +378,7 @@ function App() {
                 </div>
 
                 {question.content && (
-                  <p className="text-gray-700 mb-4">{question.content}</p>
+                  <p className="text-gray-700 mb-4 whitespace-pre-wrap">{question.content}</p>
                 )}
                 {question.code && (
                   <pre className="bg-gray-100 p-4 rounded-lg overflow-x-auto mb-4">
@@ -242,19 +395,10 @@ function App() {
                   <div className="space-y-4">
                     {question.answers.map(answer => (
                       <div key={answer.id} className="pl-4 border-l-2 border-gray-200">
-                        <div className="flex justify-between items-start">
-                          <div className="text-sm text-gray-500 mb-2">
-                            Answered on {answer.timestamp}
-                          </div>
-                          <button
-                            onClick={() => handleDeleteAnswer(question.id, answer.id)}
-                            className="text-red-500 hover:text-red-700 p-1"
-                            title="Delete answer"
-                          >
-                            <Icons.Delete />
-                          </button>
+                        <div className="text-sm text-gray-500 mb-2">
+                          Answered on {answer.timestamp}
                         </div>
-                        <p className="text-gray-700 mb-2">{answer.content}</p>
+                        <p className="text-gray-700 mb-2 whitespace-pre-wrap">{answer.content}</p>
                         {answer.code && (
                           <pre className="bg-gray-100 p-4 rounded-lg overflow-x-auto mb-2">
                             <code className="text-sm">{answer.code}</code>
@@ -269,15 +413,17 @@ function App() {
                     <h4 className="text-md font-semibold mb-2">Add an Answer</h4>
                     <textarea
                       placeholder="Write your answer..."
-                      className="w-full px-3 py-2 border rounded-md mb-2"
+                      className="w-full px-3 py-2 border rounded-md mb-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
                       rows="3"
                       id={`answer-content-${question.id}`}
+                      disabled={loading}
                     />
                     <textarea
                       placeholder="Add Python code (optional)..."
-                      className="w-full px-3 py-2 border rounded-md mb-2 font-mono text-sm"
+                      className="w-full px-3 py-2 border rounded-md mb-2 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                       rows="3"
                       id={`answer-code-${question.id}`}
+                      disabled={loading}
                     />
                     <button
                       onClick={() => {
@@ -289,9 +435,11 @@ function App() {
                           document.getElementById(`answer-code-${question.id}`).value = '';
                         }
                       }}
-                      className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600"
+                      className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 transition-colors flex items-center"
+                      disabled={loading}
                     >
-                      Submit Answer
+                      {loading && <Icons.Loading />}
+                      <span className="ml-2">Submit Answer</span>
                     </button>
                   </div>
                 </div>
