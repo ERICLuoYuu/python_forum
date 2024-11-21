@@ -33,8 +33,14 @@ jobs:
           npm install -D tailwindcss postcss autoprefixer
           npx tailwindcss init -p
 
+      - name: Create env file
+        run: |
+          echo "REACT_APP_GH_TOKEN=${{ secrets.GH_TOKEN }}" > .env
+
       - name: Build
         run: CI=false npm run build
+        env:
+          REACT_APP_GH_TOKEN: ${{ secrets.GH_TOKEN }}
 
       - name: Setup Pages
         uses: actions/configure-pages@v3
