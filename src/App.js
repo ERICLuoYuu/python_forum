@@ -3,7 +3,6 @@ import React, { useState, useEffect } from 'react';
 // Replace these with your GitHub repository details
 const GITHUB_OWNER = 'ERICLuoYuu';
 const GITHUB_REPO = 'student-qa-forum';
-const GITHUB_TOKEN = process.env.REACT_APP_GITHUB_TOKEN;
 
 // Simple SVG Icons
 const Icons = {
@@ -38,41 +37,16 @@ function App() {
     code: ''
   });
 
-  // Format the issue body with markdown
-  const formatIssueBody = (content, code) => {
-    return `${content}\n\n${code ? `\`\`\`python\n${code}\n\`\`\`` : ''}`;
-  };
-
-  // Parse the issue body to extract content and code
-  const parseIssueBody = (body) => {
-    if (!body) return { content: '', code: '' };
-    
-    const codeMatch = body.match(/```python\n([\s\S]*?)```/);
-    const code = codeMatch ? codeMatch[1].trim() : '';
-    const content = body.replace(/```python\n[\s\S]*?```/, '').trim();
-    
-    return { content, code };
-  };
   // Fetch questions from GitHub Issues
-  useEffect(() => {
-    fetchQuestions();
-  }, []);
-
   const fetchQuestions = async () => {
     try {
       setLoading(true);
       const response = await fetch(
-        `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/issues?state=open`,
-        {
-          headers: {
-            'Authorization': `token ${GITHUB_TOKEN}`,
-            'Accept': 'application/vnd.github.v3+json'
-          }
-        }
+        `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/issues?state=open`
       );
 
       if (!response.ok) {
-        throw new Error('Failed to fetch questions');
+        throw new Error(`HTTP error! status: ${response.status}`);
       }
 
       const issues = await response.json();
@@ -80,13 +54,7 @@ function App() {
       // Fetch comments for each issue
       const questionsWithAnswers = await Promise.all(issues.map(async (issue) => {
         const commentsResponse = await fetch(
-          `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/issues/${issue.number}/comments`,
-          {
-            headers: {
-              'Authorization': `token ${GITHUB_TOKEN}`,
-              'Accept': 'application/vnd.github.v3+json'
-            }
-          }
+          `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/issues/${issue.number}/comments`
         );
         
         const comments = await commentsResponse.json();
@@ -109,8 +77,8 @@ function App() {
       setQuestions(questionsWithAnswers);
       setError(null);
     } catch (err) {
-      setError('Failed to load questions: ' + err.message);
-      console.error(err);
+      console.error('Fetch error:', err);
+      setError('Failed to load questions. Please check your connection and try again.');
     } finally {
       setLoading(false);
     }
