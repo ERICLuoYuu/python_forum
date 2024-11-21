@@ -58,6 +58,7 @@ function App() {
     fetchQuestions();
   }, []);
 
+  // Then in your fetch functions, use it like this:
   const fetchQuestions = async () => {
     try {
       setLoading(true);
