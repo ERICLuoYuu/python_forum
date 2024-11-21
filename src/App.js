@@ -66,6 +66,20 @@ function App() {
   const fetchQuestions = async () => {
     try {
       setLoading(true);
+      setError(null); // Clear any previous errors
+      
+      // First check if the repo exists and issues are enabled
+      const repoResponse = await fetch(
+        `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}`,
+        {
+          headers: createHeaders()
+        }
+      );
+
+      if (!repoResponse.ok) {
+        throw new Error('Repository not found or access denied');
+      }
+
       const response = await fetch(
         `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/issues?state=open`,
         {
@@ -74,7 +88,15 @@ function App() {
       );
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        const errorData = await response.json();
+        console.error('API Error:', errorData);
+        if (response.status === 404) {
+          throw new Error('Issues feature might be disabled. Please check repository settings.');
+        } else if (response.status === 401) {
+          throw new Error('Authentication failed. Please check your GitHub token.');
+        } else {
+          throw new Error(`GitHub API error: ${errorData.message || response.statusText}`);
+        }
       }
 
       const issues = await response.json();
@@ -88,14 +110,22 @@ function App() {
           }
         );
         
-        const comments = await commentsResponse.json();
-        const { content, code } = parseIssueBody(issue.body);
+        if (!commentsResponse.ok) {
+          console.warn(`Failed to fetch comments for issue ${issue.number}`);
+          return {
+            id: issue.number,
+            title: issue.title,
+            ...parseIssueBody(issue.body),
+            timestamp: new Date(issue.created_at).toLocaleString(),
+            answers: []
+          };
+        }
         
+        const comments = await commentsResponse.json();
         return {
           id: issue.number,
           title: issue.title,
-          content: content,
-          code: code,
+          ...parseIssueBody(issue.body),
           timestamp: new Date(issue.created_at).toLocaleString(),
           answers: comments.map(comment => ({
             id: comment.id,
@@ -106,10 +136,9 @@ function App() {
       }));
       
       setQuestions(questionsWithAnswers);
-      setError(null);
     } catch (err) {
       console.error('Fetch error:', err);
-      setError('Failed to load questions. Please check your connection and try again.');
+      setError(`Failed to load questions: ${err.message}`);
     } finally {
       setLoading(false);
     }
