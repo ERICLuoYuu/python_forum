@@ -36,6 +36,8 @@ jobs:
       - name: Create env file
         run: |
           echo "REACT_APP_GH_TOKEN=${{ secrets.GH_TOKEN }}" > .env
+        env:
+          REACT_APP_GH_TOKEN: ${{ secrets.GH_TOKEN }}
 
       - name: Build
         run: CI=false npm run build
