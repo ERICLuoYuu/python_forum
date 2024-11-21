@@ -19,6 +19,13 @@ const parseIssueBody = (body) => {
   return { content, code };
 };
 
+// Create headers with authentication
+const createHeaders = () => ({
+  'Accept': 'application/vnd.github.v3+json',
+  'Authorization': `token ${process.env.REACT_APP_GH_TOKEN}`,
+  'Content-Type': 'application/json',
+});
+
 // Simple SVG Icons
 const Icons = {
   Search: () => (
@@ -38,7 +45,6 @@ const Icons = {
     </svg>
   )
 };
-
 function App() {
   // State management
   const [questions, setQuestions] = useState([]);
@@ -53,11 +59,18 @@ function App() {
   });
 
   // Fetch questions from GitHub Issues
+  useEffect(() => {
+    fetchQuestions();
+  }, []);
+
   const fetchQuestions = async () => {
     try {
       setLoading(true);
       const response = await fetch(
-        `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/issues?state=open`
+        `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/issues?state=open`,
+        {
+          headers: createHeaders()
+        }
       );
 
       if (!response.ok) {
@@ -69,7 +82,10 @@ function App() {
       // Fetch comments for each issue
       const questionsWithAnswers = await Promise.all(issues.map(async (issue) => {
         const commentsResponse = await fetch(
-          `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/issues/${issue.number}/comments`
+          `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/issues/${issue.number}/comments`,
+          {
+            headers: createHeaders()
+          }
         );
         
         const comments = await commentsResponse.json();
@@ -99,10 +115,6 @@ function App() {
     }
   };
 
-  useEffect(() => {
-    fetchQuestions();
-  }, []);
-
   // Handle question submission
   const handleSubmitQuestion = async (e) => {
     e.preventDefault();
@@ -112,9 +124,7 @@ function App() {
         `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/issues`,
         {
           method: 'POST',
-          headers: {
-            'Accept': 'application/vnd.github.v3+json',
-          },
+          headers: createHeaders(),
           body: JSON.stringify({
             title: newQuestion.title,
             body: formatIssueBody(newQuestion.content, newQuestion.code),
@@ -123,14 +133,16 @@ function App() {
       );
 
       if (!response.ok) {
-        throw new Error('Failed to create question');
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to create question');
       }
 
       await fetchQuestions();
       setNewQuestion({ title: '', content: '', code: '' });
       setShowNewQuestion(false);
+      alert('Question posted successfully!');
     } catch (err) {
-      setError('Failed to post question. Please try again.');
+      setError('Failed to post question: ' + err.message);
       console.error(err);
     } finally {
       setLoading(false);
@@ -150,9 +162,7 @@ function App() {
         `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/issues/${questionId}/comments`,
         {
           method: 'POST',
-          headers: {
-            'Accept': 'application/vnd.github.v3+json',
-          },
+          headers: createHeaders(),
           body: JSON.stringify({
             body: formatIssueBody(answerContent, answerCode),
           })
@@ -160,12 +170,14 @@ function App() {
       );
 
       if (!response.ok) {
-        throw new Error('Failed to post answer');
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to post answer');
       }
 
       await fetchQuestions();
+      alert('Answer posted successfully!');
     } catch (err) {
-      setError('Failed to post answer. Please try again.');
+      setError('Failed to post answer: ' + err.message);
       console.error(err);
     } finally {
       setLoading(false);
@@ -181,9 +193,7 @@ function App() {
           `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/issues/${questionId}`,
           {
             method: 'PATCH',
-            headers: {
-              'Accept': 'application/vnd.github.v3+json',
-            },
+            headers: createHeaders(),
             body: JSON.stringify({
               state: 'closed'
             })
@@ -191,20 +201,24 @@ function App() {
         );
 
         if (!response.ok) {
-          throw new Error('Failed to delete question');
+          const errorData = await response.json();
+          throw new Error(errorData.message || 'Failed to delete question');
         }
 
         setQuestions(prevQuestions => 
           prevQuestions.filter(q => q.id !== questionId)
         );
+        alert('Question deleted successfully!');
       } catch (err) {
-        setError('Failed to delete question. Please try again.');
+        setError('Failed to delete question: ' + err.message);
         console.error(err);
+        await fetchQuestions();
       } finally {
         setLoading(false);
       }
     }
   };
+
   // Handle answer deletion
   const handleDeleteAnswer = async (questionId, answerId) => {
     if (window.confirm('Are you sure you want to delete this answer?')) {
@@ -214,17 +228,15 @@ function App() {
           `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/issues/comments/${answerId}`,
           {
             method: 'DELETE',
-            headers: {
-              'Accept': 'application/vnd.github.v3+json',
-            }
+            headers: createHeaders(),
           }
         );
 
         if (!response.ok) {
-          throw new Error('Failed to delete answer');
+          const errorData = await response.json();
+          throw new Error(errorData.message || 'Failed to delete answer');
         }
 
-        // Update local state
         setQuestions(prevQuestions => 
           prevQuestions.map(q => {
             if (q.id === questionId) {
@@ -236,15 +248,17 @@ function App() {
             return q;
           })
         );
+        alert('Answer deleted successfully!');
       } catch (err) {
-        setError('Failed to delete answer. Please try again.');
+        setError('Failed to delete answer: ' + err.message);
         console.error(err);
-        await fetchQuestions(); // Refresh questions to ensure UI is in sync
+        await fetchQuestions();
       } finally {
         setLoading(false);
       }
     }
   };
+
   // Filter questions based on search
   const filteredQuestions = questions.filter(q => 
     q.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
