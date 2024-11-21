@@ -32,6 +32,11 @@ jobs:
           npm install -D tailwindcss postcss autoprefixer
           npx tailwindcss init -p
 
+      # This step creates a temporary .env file during build
+      - name: Create env file
+        run: |
+          echo "REACT_APP_GITHUB_TOKEN=${{ secrets.REACT_APP_GITHUB_TOKEN }}" > .env
+
       - name: Build
         run: npm run build
         env:
