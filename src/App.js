@@ -22,7 +22,7 @@ const parseIssueBody = (body) => {
 // Create headers with authentication
 const createHeaders = () => ({
   'Accept': 'application/vnd.github.v3+json',
-  'Authorization': `token ${process.env.GH_TOKEN}`,
+  'Authorization': `token ${process.env.REACT_APP_GH_TOKEN}`,
   'Content-Type': 'application/json',
 });
 
