@@ -28,7 +28,7 @@ const Icons = {
 function App() {
   // State management
   const [questions, setQuestions] = useState([]);
-  const [loading, setLoading(true);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [showNewQuestion, setShowNewQuestion] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
