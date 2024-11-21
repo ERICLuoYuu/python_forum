@@ -189,31 +189,104 @@ function App() {
   };
 
   // Delete a question (close the GitHub issue)
+  // Delete a question (Github issue)
   const handleDeleteQuestion = async (questionId) => {
     if (window.confirm('Are you sure you want to delete this question?')) {
       try {
         setLoading(true);
-        const response = await fetch(
-          `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/issues/${questionId}`,
+        
+        // First, delete all comments
+        const commentsResponse = await fetch(
+          `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/issues/${questionId}/comments`,
           {
-            method: 'PATCH',
             headers: {
               'Authorization': `token ${GITHUB_TOKEN}`,
               'Accept': 'application/vnd.github.v3+json'
-            },
-            body: JSON.stringify({
-              state: 'closed'
-            })
+            }
+          }
+        );
+        
+        const comments = await commentsResponse.json();
+        
+        // Delete each comment
+        for (const comment of comments) {
+          await fetch(
+            `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/issues/comments/${comment.id}`,
+            {
+              method: 'DELETE',
+              headers: {
+                'Authorization': `token ${GITHUB_TOKEN}`,
+                'Accept': 'application/vnd.github.v3+json'
+              }
+            }
+          );
+        }
+
+        // Then delete the issue
+        const response = await fetch(
+          `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/issues/${questionId}`,
+          {
+            method: 'DELETE',
+            headers: {
+              'Authorization': `token ${GITHUB_TOKEN}`,
+              'Accept': 'application/vnd.github.v3+json'
+            }
           }
         );
 
-        if (!response.ok) {
+        if (!response.ok && response.status !== 404) { // 404 means already deleted
           throw new Error('Failed to delete question');
         }
 
-        await fetchQuestions();
+        // Remove question from local state
+        setQuestions(prevQuestions => 
+          prevQuestions.filter(q => q.id !== questionId)
+        );
+
       } catch (err) {
         setError('Failed to delete question: ' + err.message);
+        console.error(err);
+      } finally {
+        setLoading(false);
+      }
+    }
+  };
+
+  // Delete an answer (Github comment)
+  const handleDeleteAnswer = async (questionId, answerId) => {
+    if (window.confirm('Are you sure you want to delete this answer?')) {
+      try {
+        setLoading(true);
+        const response = await fetch(
+          `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/issues/comments/${answerId}`,
+          {
+            method: 'DELETE',
+            headers: {
+              'Authorization': `token ${GITHUB_TOKEN}`,
+              'Accept': 'application/vnd.github.v3+json'
+            }
+          }
+        );
+
+        if (!response.ok && response.status !== 404) {
+          throw new Error('Failed to delete answer');
+        }
+
+        // Update local state
+        setQuestions(prevQuestions => 
+          prevQuestions.map(q => {
+            if (q.id === questionId) {
+              return {
+                ...q,
+                answers: q.answers.filter(a => a.id !== answerId)
+              };
+            }
+            return q;
+          })
+        );
+
+      } catch (err) {
+        setError('Failed to delete answer: ' + err.message);
         console.error(err);
       } finally {
         setLoading(false);
@@ -396,8 +469,18 @@ function App() {
                   <div className="space-y-4">
                     {question.answers.map(answer => (
                       <div key={answer.id} className="pl-4 border-l-2 border-gray-200">
-                        <div className="text-sm text-gray-500 mb-2">
-                          Answered on {answer.timestamp}
+                        <div className="flex justify-between items-start">
+                          <div className="text-sm text-gray-500 mb-2">
+                            Answered on {answer.timestamp}
+                          </div>
+                          <button
+                            onClick={() => handleDeleteAnswer(question.id, answer.id)}
+                            className="text-red-500 hover:text-red-700 p-1 transition-colors"
+                            title="Delete answer"
+                            disabled={loading}
+                          >
+                            <Icons.Delete />
+                          </button>
                         </div>
                         <p className="text-gray-700 mb-2 whitespace-pre-wrap">{answer.content}</p>
                         {answer.code && (
