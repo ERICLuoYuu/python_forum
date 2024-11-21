@@ -205,7 +205,46 @@ function App() {
       }
     }
   };
+  // Handle answer deletion
+  const handleDeleteAnswer = async (questionId, answerId) => {
+    if (window.confirm('Are you sure you want to delete this answer?')) {
+      try {
+        setLoading(true);
+        const response = await fetch(
+          `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/issues/comments/${answerId}`,
+          {
+            method: 'DELETE',
+            headers: {
+              'Accept': 'application/vnd.github.v3+json',
+            }
+          }
+        );
 
+        if (!response.ok) {
+          throw new Error('Failed to delete answer');
+        }
+
+        // Update local state
+        setQuestions(prevQuestions => 
+          prevQuestions.map(q => {
+            if (q.id === questionId) {
+              return {
+                ...q,
+                answers: q.answers.filter(a => a.id !== answerId)
+              };
+            }
+            return q;
+          })
+        );
+      } catch (err) {
+        setError('Failed to delete answer. Please try again.');
+        console.error(err);
+        await fetchQuestions(); // Refresh questions to ensure UI is in sync
+      } finally {
+        setLoading(false);
+      }
+    }
+  };
   // Filter questions based on search
   const filteredQuestions = questions.filter(q => 
     q.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
