@@ -28,15 +28,15 @@ jobs:
 
       - name: Install dependencies
         run: |
-          rm -f package-lock.json
           npm install
-          npm install -D tailwindcss@latest postcss@latest autoprefixer@latest
+          npm install -D tailwindcss postcss autoprefixer
           npx tailwindcss init -p
 
       - name: Build
         run: npm run build
         env:
           CI: false
+          REACT_APP_GITHUB_TOKEN: ${{ secrets.REACT_APP_GITHUB_TOKEN }}
 
       - name: Setup Pages
         uses: actions/configure-pages@v3
