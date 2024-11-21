@@ -289,7 +289,7 @@ function App() {
         );
 
         // Wait a bit to ensure GitHub API has processed everything
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        await new Promise(resolve => setTimeout(resolve, 5));
         
         // Refresh the questions list
         await fetchQuestions();
@@ -342,7 +342,7 @@ function App() {
         );
 
         // Wait a bit to ensure GitHub API has processed the deletion
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        await new Promise(resolve => setTimeout(resolve, 5));
         
         // Refresh the questions list
         await fetchQuestions();
