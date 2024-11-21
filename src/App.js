@@ -28,7 +28,7 @@ const Icons = {
 function App() {
   // State management
   const [questions, setQuestions] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading(true);
   const [error, setError] = useState(null);
   const [showNewQuestion, setShowNewQuestion] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -58,12 +58,11 @@ function App() {
     fetchQuestions();
   }, []);
 
-  // Function to fetch only open issues
   const fetchQuestions = async () => {
     try {
       setLoading(true);
       const response = await fetch(
-        `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/issues?state=open`, // Only fetch open issues
+        `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/issues?state=open`,
         {
           headers: {
             'Authorization': `token ${GITHUB_TOKEN}`,
@@ -117,13 +116,46 @@ function App() {
     }
   };
 
-  // Close a question (Github issue)
+  // Post a new question as a GitHub issue
+  const handleSubmitQuestion = async (e) => {
+    e.preventDefault();
+    try {
+      setLoading(true);
+      const response = await fetch(
+        `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/issues`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `token ${GITHUB_TOKEN}`,
+            'Accept': 'application/vnd.github.v3+json'
+          },
+          body: JSON.stringify({
+            title: newQuestion.title,
+            body: formatIssueBody(newQuestion.content, newQuestion.code),
+          })
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error('Failed to create question');
+      }
+
+      await fetchQuestions(); // Refresh questions
+      setNewQuestion({ title: '', content: '', code: '' });
+      setShowNewQuestion(false);
+    } catch (err) {
+      setError('Failed to post question: ' + err.message);
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Handle delete question (close the issue)
   const handleDeleteQuestion = async (questionId) => {
     if (window.confirm('Are you sure you want to delete this question?')) {
       try {
         setLoading(true);
-
-        // Close the issue instead of deleting
         const response = await fetch(
           `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/issues/${questionId}`,
           {
@@ -147,21 +179,54 @@ function App() {
           prevQuestions.filter(q => q.id !== questionId)
         );
 
-        // Show success message
         alert('Question successfully deleted');
-
       } catch (err) {
         setError('Failed to delete question: ' + err.message);
         console.error(err);
-        // Refresh questions to ensure UI is in sync
-        await fetchQuestions();
+        await fetchQuestions(); // Refresh questions to ensure UI is in sync
       } finally {
         setLoading(false);
       }
     }
   };
 
-  // Delete an answer (Github comment)
+  // Handle submit answer
+  const handleSubmitAnswer = async (questionId, answerContent, answerCode) => {
+    if (!answerContent.trim()) {
+      alert('Answer content cannot be empty');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const response = await fetch(
+        `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/issues/${questionId}/comments`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `token ${GITHUB_TOKEN}`,
+            'Accept': 'application/vnd.github.v3+json'
+          },
+          body: JSON.stringify({
+            body: formatIssueBody(answerContent, answerCode),
+          })
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error('Failed to post answer');
+      }
+
+      await fetchQuestions(); // Refresh questions
+    } catch (err) {
+      setError('Failed to post answer: ' + err.message);
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Handle delete answer
   const handleDeleteAnswer = async (questionId, answerId) => {
     if (window.confirm('Are you sure you want to delete this answer?')) {
       try {
@@ -194,14 +259,11 @@ function App() {
           })
         );
 
-        // Show success message
         alert('Answer successfully deleted');
-
       } catch (err) {
         setError('Failed to delete answer: ' + err.message);
         console.error(err);
-        // Refresh questions to ensure UI is in sync
-        await fetchQuestions();
+        await fetchQuestions(); // Refresh questions to ensure UI is in sync
       } finally {
         setLoading(false);
       }
@@ -226,11 +288,6 @@ function App() {
         {error && (
           <div className="bg-red-50 border-l-4 border-red-400 p-4 mb-6">
             <div className="flex">
-              <div className="flex-shrink-0">
-                <svg className="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
-                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-                </svg>
-              </div>
               <div className="ml-3">
                 <p className="text-sm text-red-700">{error}</p>
               </div>
@@ -350,6 +407,7 @@ function App() {
           ) : (
             filteredQuestions.map(question => (
               <div key={question.id} className="bg-white shadow rounded-lg p-6">
+                {/* Question Header */}
                 <div className="flex justify-between items-start mb-2">
                   <h2 className="text-xl font-semibold">{question.title}</h2>
                   <button
@@ -365,6 +423,7 @@ function App() {
                   Posted on {question.timestamp}
                 </div>
 
+                {/* Question Content */}
                 {question.content && (
                   <p className="text-gray-700 mb-4 whitespace-pre-wrap">{question.content}</p>
                 )}
@@ -380,6 +439,7 @@ function App() {
                     {question.answers.length} Answers
                   </h3>
                   
+                  {/* Answers List */}
                   <div className="space-y-4">
                     {question.answers.map(answer => (
                       <div key={answer.id} className="pl-4 border-l-2 border-gray-200">
