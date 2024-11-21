@@ -256,6 +256,29 @@ function App() {
     if (window.confirm('Are you sure you want to delete this question?')) {
       try {
         setLoading(true);
+        setError(null);
+
+        // First, delete all comments of the issue
+        const commentsResponse = await fetch(
+          `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/issues/${questionId}/comments`,
+          { headers: createHeaders() }
+        );
+
+        if (commentsResponse.ok) {
+          const comments = await commentsResponse.json();
+          // Delete each comment
+          for (const comment of comments) {
+            await fetch(
+              `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/issues/comments/${comment.id}`,
+              {
+                method: 'DELETE',
+                headers: createHeaders()
+              }
+            );
+          }
+        }
+
+        // Then close the issue
         const response = await fetch(
           `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/issues/${questionId}`,
           {
@@ -272,13 +295,22 @@ function App() {
           throw new Error(errorData.message || 'Failed to delete question');
         }
 
+        // Update local state
         setQuestions(prevQuestions => 
           prevQuestions.filter(q => q.id !== questionId)
         );
+
+        // Wait a bit to ensure GitHub API has processed everything
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        // Refresh the questions list
+        await fetchQuestions();
+        
         alert('Question deleted successfully!');
       } catch (err) {
+        console.error('Error deleting question:', err);
         setError('Failed to delete question: ' + err.message);
-        console.error(err);
+        // Refresh questions to ensure UI is in sync
         await fetchQuestions();
       } finally {
         setLoading(false);
@@ -291,19 +323,24 @@ function App() {
     if (window.confirm('Are you sure you want to delete this answer?')) {
       try {
         setLoading(true);
+        setError(null);
+
+        console.log('Deleting answer:', answerId);
+
         const response = await fetch(
           `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/issues/comments/${answerId}`,
           {
             method: 'DELETE',
-            headers: createHeaders(),
+            headers: createHeaders()
           }
         );
 
-        if (!response.ok) {
-          const errorData = await response.json();
+        if (!response.ok && response.status !== 404) {
+          const errorData = await response.json().catch(() => ({}));
           throw new Error(errorData.message || 'Failed to delete answer');
         }
 
+        // Update local state
         setQuestions(prevQuestions => 
           prevQuestions.map(q => {
             if (q.id === questionId) {
@@ -315,10 +352,18 @@ function App() {
             return q;
           })
         );
+
+        // Wait a bit to ensure GitHub API has processed the deletion
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        // Refresh the questions list
+        await fetchQuestions();
+        
         alert('Answer deleted successfully!');
       } catch (err) {
+        console.error('Error deleting answer:', err);
         setError('Failed to delete answer: ' + err.message);
-        console.error(err);
+        // Refresh questions to ensure UI is in sync
         await fetchQuestions();
       } finally {
         setLoading(false);
