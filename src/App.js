@@ -35,31 +35,31 @@ const retryOperation = async (operation, maxAttempts = 3, delay = 1000) => {
 };
 
 // Modified createHeaders function
+// Modified createHeaders function with proper CORS headers
 const createHeaders = () => {
   const token = process.env.REACT_APP_GH_TOKEN;
   const headers = {
     'Accept': 'application/vnd.github.v3+json',
     'Content-Type': 'application/json',
-    'Cache-Control': 'no-cache, no-store, must-revalidate',
-    'Pragma': 'no-cache',
-    'Expires': '0'
+    'Authorization': `Bearer ${token}`,
+    'Origin': window.location.origin,
+    'Access-Control-Request-Method': 'GET, POST, PATCH, DELETE',
+    'Access-Control-Request-Headers': 'Content-Type, Authorization'
   };
-
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
-  }
 
   return headers;
 };
 
-// Modified apiCall function with retry logic
+// Modified apiCall function with CORS handling
 const apiCall = async (endpoint, options = {}) => {
   const baseUrl = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}`;
   const defaultHeaders = createHeaders();
   
-  return retryOperation(async () => {
+  try {
     const response = await fetch(`${baseUrl}${endpoint}`, {
       ...options,
+      mode: 'cors',
+      credentials: 'same-origin',
       headers: {
         ...defaultHeaders,
         ...options.headers
@@ -76,7 +76,10 @@ const apiCall = async (endpoint, options = {}) => {
     }
 
     return await response.json();
-  });
+  } catch (error) {
+    console.error('API call failed:', error);
+    throw error;
+  }
 };
 // Simple SVG Icons
 const Icons = {
@@ -117,6 +120,20 @@ function App() {
 
   const fetchQuestions = async () => {
   try {
+    setLoading(true);
+    setError(null);
+
+    // Test connection and CORS setup
+    const testResponse = await fetch('https://api.github.com', {
+      headers: createHeaders(),
+      mode: 'cors',
+      credentials: 'same-origin'
+    });
+
+    if (!testResponse.ok) {
+      throw new Error('GitHub API connection failed');
+    }
+
     const issues = await apiCall('/issues?state=open&sort=updated&direction=desc');
     
     const questionsWithAnswers = await Promise.all(
@@ -144,9 +161,13 @@ function App() {
       })
     );
 
-    return questionsWithAnswers.filter(q => q !== null);
+    const validQuestions = questionsWithAnswers.filter(q => q !== null);
+    setQuestions(validQuestions);
   } catch (error) {
-    throw new Error(`Failed to fetch questions: ${error.message}`);
+    console.error('Fetch error:', error);
+    setError(`Failed to load questions: ${error.message}`);
+  } finally {
+    setLoading(false);
   }
 };
   
