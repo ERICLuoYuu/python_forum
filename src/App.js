@@ -6,13 +6,23 @@ const GITHUB_REPO = 'student-qa-forum';
 
 // Utility functions
 // Create headers with authentication
-const createHeaders = () => ({
-  'Accept': 'application/vnd.github.v3+json',
-  'Authorization': `token ${process.env.REACT_APP_GH_TOKEN}`,
-  'Content-Type': 'application/json',
-  'Cache-Control': 'no-cache',
-  'Pragma': 'no-cache'
-});
+const createHeaders = () => {
+  const token = process.env.REACT_APP_GH_TOKEN;
+  console.log('Token present:', !!token); // Debug log
+
+  const headers = {
+    'Accept': 'application/vnd.github.v3+json',
+    'Content-Type': 'application/json',
+  };
+
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`; // Changed from 'token' to 'Bearer'
+  } else {
+    console.warn('GitHub token not found');
+  }
+
+  return headers;
+};
 const formatIssueBody = (content, code) => {
   return `${content}\n\n${code ? `\`\`\`python\n${code}\n\`\`\`` : ''}`;
 };
@@ -98,15 +108,49 @@ function App() {
     setLoading(true);
     setError(null);
 
-    // Fetch issues and their comments in parallel
-    const issues = await apiCall('/issues?state=open&sort=created&direction=desc');
+    console.log('Fetching questions...');
+    
+    // First, test the API connection
+    const testResponse = await fetch(
+      `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}`,
+      { headers: createHeaders() }
+    );
+
+    if (!testResponse.ok) {
+      console.error('Repository access failed:', await testResponse.text());
+      throw new Error('Repository access failed');
+    }
+
+    // Fetch issues
+    const issuesResponse = await fetch(
+      `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/issues?state=open&sort=created&direction=desc`,
+      { headers: createHeaders() }
+    );
+
+    if (!issuesResponse.ok) {
+      console.error('Issues fetch failed:', await issuesResponse.text());
+      throw new Error('Failed to fetch issues');
+    }
+
+    const issues = await issuesResponse.json();
+    console.log('Fetched issues:', issues);
     
     const questionsWithAnswers = await Promise.all(
       issues.map(async issue => {
         try {
-          const comments = await apiCall(`/issues/${issue.number}/comments`);
-          const { content, code } = parseIssueBody(issue.body);
+          const commentsResponse = await fetch(
+            `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/issues/${issue.number}/comments`,
+            { headers: createHeaders() }
+          );
           
+          let comments = [];
+          if (commentsResponse.ok) {
+            comments = await commentsResponse.json();
+          } else {
+            console.warn(`Failed to fetch comments for issue ${issue.number}`);
+          }
+
+          const { content, code } = parseIssueBody(issue.body);
           return {
             id: issue.number,
             title: issue.title,
@@ -126,8 +170,10 @@ function App() {
       })
     );
 
-    setQuestions(questionsWithAnswers.filter(q => q !== null));
+    const validQuestions = questionsWithAnswers.filter(q => q !== null);
+    setQuestions(validQuestions);
   } catch (error) {
+    console.error('Fetch error:', error);
     setError(`Failed to load questions: ${error.message}`);
   } finally {
     setLoading(false);
