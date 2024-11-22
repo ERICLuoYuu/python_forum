@@ -5,7 +5,6 @@ const GITHUB_OWNER = 'ERICLuoYuu';
 const GITHUB_REPO = 'student-qa-forum';
 
 // Utility functions
-// Create headers with authentication
 const createHeaders = () => {
   const token = process.env.REACT_APP_GH_TOKEN;
   console.log('Token present:', !!token); // Debug log
@@ -13,16 +12,19 @@ const createHeaders = () => {
   const headers = {
     'Accept': 'application/vnd.github.v3+json',
     'Content-Type': 'application/json',
+    'Cache-Control': 'no-cache',
+    'If-None-Match': '' // Bypass GitHub's ETag caching
   };
 
   if (token) {
-    headers['Authorization'] = `Bearer ${token}`; // Changed from 'token' to 'Bearer'
+    headers['Authorization'] = `Bearer ${token}`;
   } else {
     console.warn('GitHub token not found');
   }
 
   return headers;
 };
+
 const formatIssueBody = (content, code) => {
   return `${content}\n\n${code ? `\`\`\`python\n${code}\n\`\`\`` : ''}`;
 };
@@ -36,13 +38,15 @@ const parseIssueBody = (body) => {
   
   return { content, code };
 };
-// Utility function for API calls
+
+// Helper function for API calls
 const apiCall = async (endpoint, options = {}) => {
   const baseUrl = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}`;
+  const timestamp = new Date().getTime();
   const defaultHeaders = createHeaders();
   
   try {
-    const response = await fetch(`${baseUrl}${endpoint}`, {
+    const response = await fetch(`${baseUrl}${endpoint}${endpoint.includes('?') ? '&' : '?'}t=${timestamp}`, {
       ...options,
       headers: {
         ...defaultHeaders,
@@ -64,6 +68,13 @@ const apiCall = async (endpoint, options = {}) => {
     console.error('API call failed:', error);
     throw error;
   }
+};
+
+// Helper function to wait for GitHub updates
+const waitForGitHubUpdate = async () => {
+  // Wait for 2 seconds to allow GitHub to process the change
+  await new Promise(resolve => setTimeout(resolve, 2000));
+  return fetchQuestions();
 };
 
 // Simple SVG Icons
@@ -104,92 +115,106 @@ function App() {
   }, []);
 
   const fetchQuestions = async () => {
-  try {
-    setLoading(true);
-    setError(null);
+    try {
+      setLoading(true);
+      setError(null);
 
-    console.log('Fetching questions...');
-    
-    // First, test the API connection
-    const testResponse = await fetch(
-      `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}`,
-      { headers: createHeaders() }
-    );
-
-    if (!testResponse.ok) {
-      console.error('Repository access failed:', await testResponse.text());
-      throw new Error('Repository access failed');
-    }
-
-    // Fetch issues
-    const issuesResponse = await fetch(
-      `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/issues?state=open&sort=created&direction=desc`,
-      { headers: createHeaders() }
-    );
-
-    if (!issuesResponse.ok) {
-      console.error('Issues fetch failed:', await issuesResponse.text());
-      throw new Error('Failed to fetch issues');
-    }
-
-    const issues = await issuesResponse.json();
-    console.log('Fetched issues:', issues);
-    
-    const questionsWithAnswers = await Promise.all(
-      issues.map(async issue => {
-        try {
-          const commentsResponse = await fetch(
-            `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/issues/${issue.number}/comments`,
-            { headers: createHeaders() }
-          );
-          
-          let comments = [];
-          if (commentsResponse.ok) {
-            comments = await commentsResponse.json();
-          } else {
-            console.warn(`Failed to fetch comments for issue ${issue.number}`);
-          }
-
-          const { content, code } = parseIssueBody(issue.body);
-          return {
-            id: issue.number,
-            title: issue.title,
-            content,
-            code,
-            timestamp: new Date(issue.created_at).toLocaleString(),
-            answers: comments.map(comment => ({
-              id: comment.id,
-              ...parseIssueBody(comment.body),
-              timestamp: new Date(comment.created_at).toLocaleString()
-            }))
-          };
-        } catch (error) {
-          console.error(`Error processing issue ${issue.number}:`, error);
-          return null;
+      console.log('Fetching questions...');
+      
+      // Add cache-busting parameter and ensure we get fresh data
+      const timestamp = new Date().getTime();
+      
+      // First, test the API connection
+      const testResponse = await fetch(
+        `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}?t=${timestamp}`,
+        { 
+          headers: createHeaders()
         }
-      })
-    );
+      );
 
-    const validQuestions = questionsWithAnswers.filter(q => q !== null);
-    setQuestions(validQuestions);
-  } catch (error) {
-    console.error('Fetch error:', error);
-    setError(`Failed to load questions: ${error.message}`);
-  } finally {
-    setLoading(false);
-  }
-};
-  
-  
+      if (!testResponse.ok) {
+        console.error('Repository access failed:', await testResponse.text());
+        throw new Error('Repository access failed');
+      }
 
-  // Optimized question posting
+      // Fetch issues
+      const issuesResponse = await fetch(
+        `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/issues?state=open&sort=created&direction=desc&t=${timestamp}`,
+        { 
+          headers: {
+            ...createHeaders(),
+            'Cache-Control': 'no-cache',
+            'If-None-Match': ''
+          }
+        }
+      );
+
+      if (!issuesResponse.ok) {
+        console.error('Issues fetch failed:', await issuesResponse.text());
+        throw new Error('Failed to fetch issues');
+      }
+
+      const issues = await issuesResponse.json();
+      console.log('Fetched issues:', issues);
+      
+      const questionsWithAnswers = await Promise.all(
+        issues.map(async issue => {
+          try {
+            const commentsResponse = await fetch(
+              `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/issues/${issue.number}/comments?t=${timestamp}`,
+              { 
+                headers: {
+                  ...createHeaders(),
+                  'Cache-Control': 'no-cache',
+                  'If-None-Match': ''
+                }
+              }
+            );
+            
+            let comments = [];
+            if (commentsResponse.ok) {
+              comments = await commentsResponse.json();
+            } else {
+              console.warn(`Failed to fetch comments for issue ${issue.number}`);
+            }
+
+            const { content, code } = parseIssueBody(issue.body);
+            return {
+              id: issue.number,
+              title: issue.title,
+              content,
+              code,
+              timestamp: new Date(issue.created_at).toLocaleString(),
+              answers: comments.map(comment => ({
+                id: comment.id,
+                ...parseIssueBody(comment.body),
+                timestamp: new Date(comment.created_at).toLocaleString()
+              }))
+            };
+          } catch (error) {
+            console.error(`Error processing issue ${issue.number}:`, error);
+            return null;
+          }
+        })
+      );
+
+      const validQuestions = questionsWithAnswers.filter(q => q !== null);
+      setQuestions(validQuestions);
+    } catch (error) {
+      console.error('Fetch error:', error);
+      setError(`Failed to load questions: ${error.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+  // Question submission handler
   const handleSubmitQuestion = async (e) => {
     e.preventDefault();
     if (!newQuestion.title.trim() || !newQuestion.content.trim()) {
       alert('Title and description are required!');
       return;
     }
-  
+
     const optimisticQuestion = {
       id: `temp-${Date.now()}`,
       title: newQuestion.title,
@@ -198,209 +223,161 @@ function App() {
       timestamp: new Date().toLocaleString(),
       answers: []
     };
-  
-    // Immediate UI update
+
     setQuestions(prev => [optimisticQuestion, ...prev]);
     setNewQuestion({ title: '', content: '', code: '' });
     setShowNewQuestion(false);
-  
+
     try {
-      const response = await apiCall('/issues', {
+      await apiCall('/issues', {
         method: 'POST',
         body: JSON.stringify({
           title: newQuestion.title,
           body: formatIssueBody(newQuestion.content, newQuestion.code),
         })
       });
-  
-      // Update the temporary question with real data
-      setQuestions(prev => [
-        {
-          id: response.number,
-          title: response.title,
-          content: newQuestion.content,
-          code: newQuestion.code,
-          timestamp: new Date(response.created_at).toLocaleString(),
-          answers: []
-        },
-        ...prev.filter(q => q.id !== optimisticQuestion.id)
-      ]);
-  
+
+      // Wait and refresh
+      await waitForGitHubUpdate();
+
     } catch (error) {
-      // Revert on failure
       setQuestions(prev => prev.filter(q => q.id !== optimisticQuestion.id));
       setError(`Failed to post question: ${error.message}`);
     }
   };
 
-  // Handle answer submission
-  const handleSubmitAnswer = async (questionId, answerContent, answerCode) => {
-  if (!answerContent.trim()) {
-    alert('Answer content cannot be empty');
-    return;
-  }
+  // Question deletion handler
+  const handleDeleteQuestion = async (questionId) => {
+    if (!window.confirm('Are you sure you want to delete this question?')) {
+      return;
+    }
 
-  // Create optimistic answer
-  const optimisticAnswer = {
-    id: `temp-${Date.now()}`,
-    content: answerContent,
-    code: answerCode,
-    timestamp: new Date().toLocaleString()
+    const questionToDelete = questions.find(q => q.id === questionId);
+    setQuestions(prev => prev.filter(q => q.id !== questionId));
+
+    try {
+      await Promise.all([
+        // Delete all comments
+        apiCall(`/issues/${questionId}/comments`).then(comments =>
+          Promise.all(
+            comments.map(comment =>
+              apiCall(`/issues/comments/${comment.id}`, { method: 'DELETE' })
+            )
+          )
+        ),
+        // Close the issue
+        apiCall(`/issues/${questionId}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ state: 'closed' })
+        })
+      ]);
+
+      // Wait and refresh
+      await waitForGitHubUpdate();
+
+    } catch (error) {
+      setQuestions(prev => [...prev, questionToDelete]);
+      setError(`Failed to delete question: ${error.message}`);
+    }
   };
 
-  // Clear input fields immediately
-  const contentElement = document.getElementById(`answer-content-${questionId}`);
-  const codeElement = document.getElementById(`answer-code-${questionId}`);
-  const content = contentElement.value;
-  const code = codeElement.value;
-  contentElement.value = '';
-  codeElement.value = '';
+  // Answer submission handler
+  const handleSubmitAnswer = async (questionId, answerContent, answerCode) => {
+    if (!answerContent.trim()) {
+      alert('Answer content cannot be empty');
+      return;
+    }
 
-  // Immediate UI update
-  setQuestions(prev =>
-    prev.map(q => {
-      if (q.id === questionId) {
-        return {
-          ...q,
-          answers: [...q.answers, optimisticAnswer]
-        };
-      }
-      return q;
-    })
-  );
+    const optimisticAnswer = {
+      id: `temp-${Date.now()}`,
+      content: answerContent,
+      code: answerCode,
+      timestamp: new Date().toLocaleString()
+    };
 
-  try {
-    const response = await apiCall(`/issues/${questionId}/comments`, {
-      method: 'POST',
-      body: JSON.stringify({
-        body: formatIssueBody(answerContent, answerCode)
-      })
-    });
-
-    // Update optimistic answer with real data
     setQuestions(prev =>
       prev.map(q => {
         if (q.id === questionId) {
           return {
             ...q,
-            answers: q.answers.map(a =>
-              a.id === optimisticAnswer.id
-                ? {
-                    id: response.id,
-                    content: answerContent,
-                    code: answerCode,
-                    timestamp: new Date(response.created_at).toLocaleString()
-                  }
-                : a
-            )
+            answers: [...q.answers, optimisticAnswer]
           };
         }
         return q;
       })
     );
 
-  } catch (error) {
-    // Restore input values on failure
-    contentElement.value = content;
-    codeElement.value = code;
-    
-    // Remove optimistic answer
+    try {
+      await apiCall(`/issues/${questionId}/comments`, {
+        method: 'POST',
+        body: JSON.stringify({
+          body: formatIssueBody(answerContent, answerCode)
+        })
+      });
+
+      // Wait and refresh
+      await waitForGitHubUpdate();
+
+    } catch (error) {
+      setQuestions(prev =>
+        prev.map(q => {
+          if (q.id === questionId) {
+            return {
+              ...q,
+              answers: q.answers.filter(a => a.id !== optimisticAnswer.id)
+            };
+          }
+          return q;
+        })
+      );
+      setError(`Failed to post answer: ${error.message}`);
+    }
+  };
+
+  // Answer deletion handler
+  const handleDeleteAnswer = async (questionId, answerId) => {
+    if (!window.confirm('Are you sure you want to delete this answer?')) {
+      return;
+    }
+
+    const currentQuestion = questions.find(q => q.id === questionId);
+    const answerToDelete = currentQuestion.answers.find(a => a.id === answerId);
+
     setQuestions(prev =>
       prev.map(q => {
         if (q.id === questionId) {
           return {
             ...q,
-            answers: q.answers.filter(a => a.id !== optimisticAnswer.id)
+            answers: q.answers.filter(a => a.id !== answerId)
           };
         }
         return q;
       })
     );
-    setError(`Failed to post answer: ${error.message}`);
-  }
-};
 
-  // Handle question deletion
-  const handleDeleteQuestion = async (questionId) => {
-  if (!window.confirm('Are you sure you want to delete this question?')) {
-    return;
-  }
+    try {
+      await apiCall(`/issues/comments/${answerId}`, {
+        method: 'DELETE'
+      });
 
-  // Store question for potential rollback
-  const questionToDelete = questions.find(q => q.id === questionId);
-  
-  // Immediate UI update
-  setQuestions(prev => prev.filter(q => q.id !== questionId));
+      // Wait and refresh
+      await waitForGitHubUpdate();
 
-  try {
-    // Delete comments and close issue in parallel
-    await Promise.all([
-      // Delete all comments
-      apiCall(`/issues/${questionId}/comments`).then(comments =>
-        Promise.all(
-          comments.map(comment =>
-            apiCall(`/issues/comments/${comment.id}`, { method: 'DELETE' })
-          )
-        )
-      ),
-      // Close the issue
-      apiCall(`/issues/${questionId}`, {
-        method: 'PATCH',
-        body: JSON.stringify({ state: 'closed' })
-      })
-    ]);
-
-  } catch (error) {
-    // Rollback on failure
-    setQuestions(prev => [...prev, questionToDelete]);
-    setError(`Failed to delete question: ${error.message}`);
-  }
-};
-
-// Optimized answer deletion
-const handleDeleteAnswer = async (questionId, answerId) => {
-  if (!window.confirm('Are you sure you want to delete this answer?')) {
-    return;
-  }
-
-  // Store the current state of answers for potential rollback
-  const currentQuestion = questions.find(q => q.id === questionId);
-  const answerToDelete = currentQuestion.answers.find(a => a.id === answerId);
-
-  // Immediate UI update
-  setQuestions(prev =>
-    prev.map(q => {
-      if (q.id === questionId) {
-        return {
-          ...q,
-          answers: q.answers.filter(a => a.id !== answerId)
-        };
-      }
-      return q;
-    })
-  );
-
-  try {
-    await apiCall(`/issues/comments/${answerId}`, {
-      method: 'DELETE'
-    });
-  } catch (error) {
-    // Rollback on failure
-    setQuestions(prev =>
-      prev.map(q => {
-        if (q.id === questionId) {
-          return {
-            ...q,
-            answers: [...q.answers, answerToDelete]
-          };
-        }
-        return q;
-      })
-    );
-    setError(`Failed to delete answer: ${error.message}`);
-  }
-};
-
+    } catch (error) {
+      setQuestions(prev =>
+        prev.map(q => {
+          if (q.id === questionId) {
+            return {
+              ...q,
+              answers: [...q.answers, answerToDelete]
+            };
+          }
+          return q;
+        })
+      );
+      setError(`Failed to delete answer: ${error.message}`);
+    }
+  };
 
   // Filter questions based on search
   const filteredQuestions = questions.filter(q => 
@@ -619,11 +596,7 @@ const handleDeleteAnswer = async (questionId, answerId) => {
                       onClick={() => {
                         const content = document.getElementById(`answer-content-${question.id}`).value;
                         const code = document.getElementById(`answer-code-${question.id}`).value;
-                        if (content) {
-                          handleSubmitAnswer(question.id, content, code);
-                          document.getElementById(`answer-content-${question.id}`).value = '';
-                          document.getElementById(`answer-code-${question.id}`).value = '';
-                        }
+                        handleSubmitAnswer(question.id, content, code);
                       }}
                       className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 transition-colors flex items-center"
                       disabled={loading}
