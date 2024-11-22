@@ -210,8 +210,32 @@ function App() {
       return;
     }
 
+    // Create optimistic answer
+    const optimisticAnswer = {
+      id: `temp-${Date.now()}`, // temporary ID
+      content: answerContent,
+      code: answerCode,
+      timestamp: new Date().toLocaleString()
+    };
+
+    // Immediately update UI
+    setQuestions(prevQuestions =>
+      prevQuestions.map(q => {
+        if (q.id === questionId) {
+          return {
+            ...q,
+            answers: [...q.answers, optimisticAnswer]
+          };
+        }
+        return q;
+      })
+    );
+
+    // Clear input fields immediately
+    document.getElementById(`answer-content-${questionId}`).value = '';
+    document.getElementById(`answer-code-${questionId}`).value = '';
+
     try {
-      setLoading(true);
       const response = await fetch(
         `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/issues/${questionId}/comments`,
         {
@@ -224,17 +248,61 @@ function App() {
       );
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Failed to post answer');
+        throw new Error('Failed to post answer');
       }
 
-      await fetchQuestions();
-      alert('Answer posted successfully!');
+      const newAnswer = await response.json();
+
+      // Update the temporary answer with the real one
+      setQuestions(prevQuestions =>
+        prevQuestions.map(q => {
+          if (q.id === questionId) {
+            return {
+              ...q,
+              answers: q.answers.map(a => 
+                a.id === optimisticAnswer.id
+                  ? {
+                      id: newAnswer.id,
+                      content: answerContent,
+                      code: answerCode,
+                      timestamp: new Date(newAnswer.created_at).toLocaleString()
+                    }
+                  : a
+              )
+            };
+          }
+          return q;
+        })
+      );
+
+      // Show success notification
+      const notification = document.createElement('div');
+      notification.className = 'fixed bottom-4 right-4 bg-green-500 text-white px-4 py-2 rounded shadow-lg';
+      notification.textContent = 'Answer posted successfully!';
+      document.body.appendChild(notification);
+      setTimeout(() => notification.remove(), 3000);
+
     } catch (err) {
-      setError('Failed to post answer: ' + err.message);
-      console.error(err);
-    } finally {
-      setLoading(false);
+      console.error('Error posting answer:', err);
+      // Remove the optimistic answer
+      setQuestions(prevQuestions =>
+        prevQuestions.map(q => {
+          if (q.id === questionId) {
+            return {
+              ...q,
+              answers: q.answers.filter(a => a.id !== optimisticAnswer.id)
+            };
+          }
+          return q;
+        })
+      );
+      
+      // Show error notification
+      const notification = document.createElement('div');
+      notification.className = 'fixed bottom-4 right-4 bg-red-500 text-white px-4 py-2 rounded shadow-lg';
+      notification.textContent = 'Failed to post answer. Please try again.';
+      document.body.appendChild(notification);
+      setTimeout(() => notification.remove(), 3000);
     }
   };
 
