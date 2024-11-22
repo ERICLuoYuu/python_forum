@@ -21,7 +21,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v3
 
-      - name: Set up Node.js
+      - name: Setup Node.js
         uses: actions/setup-node@v3
         with:
           node-version: '18'
@@ -30,17 +30,10 @@ jobs:
         run: |
           npm install
           npm install @babel/plugin-proposal-private-property-in-object --save-dev
-          npm install -D tailwindcss postcss autoprefixer
-          npx tailwindcss init -p
 
       - name: Create env file
         run: |
-          touch .env
-          echo "REACT_APP_GH_TOKEN=${{ secrets.GH_TOKEN }}" >> .env
-
-      - name: Debug Environment
-        run: |
-          echo "Checking for token presence (not showing value):"
+          echo "REACT_APP_GH_TOKEN=${{ secrets.GH_TOKEN }}" > .env
           echo "Token exists: ${{ secrets.GH_TOKEN != '' }}"
 
       - name: Build
