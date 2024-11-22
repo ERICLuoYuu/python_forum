@@ -113,96 +113,101 @@ function App() {
   });
 
   // Redefine fetchQuestions within the component
-  fetchQuestions = async () => {
-    try {
-      setLoading(true);
-      setError(null);
+  const fetchQuestions = async () => {
+  try {
+    setLoading(true);
+    setError(null);
 
-      console.log('Fetching questions...');
-      
-      // Fetch issues with detailed error logging
-      const issuesUrl = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/issues?state=open&sort=created&direction=desc`;
-      console.log('Fetching from:', issuesUrl);
-      
-      const issuesResponse = await fetch(issuesUrl, {
-        headers: createHeaders()
-      });
+    // Log the URL we're trying to access
+    const repoUrl = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}`;
+    console.log('Attempting to access:', repoUrl);
 
-      if (!issuesResponse.ok) {
-        const errorText = await issuesResponse.text();
-        console.error('Issues fetch failed:', {
-          status: issuesResponse.status,
-          statusText: issuesResponse.statusText,
-          error: errorText
-        });
-        throw new Error(`Failed to fetch issues: ${issuesResponse.status} ${issuesResponse.statusText}`);
-      }
+    // Test repository access first
+    const testResponse = await fetch(repoUrl);
+    console.log('Repository access response:', {
+      status: testResponse.status,
+      ok: testResponse.ok,
+      headers: Object.fromEntries(testResponse.headers.entries())
+    });
 
-      const issues = await issuesResponse.json();
-      console.log('Fetched issues:', issues);
-      
-      const questionsWithAnswers = await Promise.all(
-        issues.map(async issue => {
-          try {
-            const commentsResponse = await fetch(
-              `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/issues/${issue.number}/comments`,
-              { headers: createHeaders() }
-            );
-            
-            let comments = [];
-            if (commentsResponse.ok) {
-              comments = await commentsResponse.json();
-            } else {
-              console.warn(`Failed to fetch comments for issue ${issue.number}:`, 
-                commentsResponse.status, 
-                commentsResponse.statusText
-              );
-            }
-
-            const { content, code } = parseIssueBody(issue.body);
-            return {
-              id: issue.number,
-              title: issue.title,
-              content,
-              code,
-              timestamp: new Date(issue.created_at).toLocaleString(),
-              answers: comments.map(comment => ({
-                id: comment.id,
-                ...parseIssueBody(comment.body),
-                timestamp: new Date(comment.created_at).toLocaleString()
-              }))
-            };
-          } catch (error) {
-            console.error(`Error processing issue ${issue.number}:`, error);
-            return null;
-          }
-        })
-      );
-
-      const validQuestions = questionsWithAnswers.filter(q => q !== null);
-      setQuestions(validQuestions);
-    } catch (error) {
-      console.error('Fetch error:', {
-        message: error.message,
-        stack: error.stack,
-        name: error.name
-      });
-      setError(`Failed to load questions: ${error.message}`);
-      setQuestions([]); // Clear questions on error
-    } finally {
-      setLoading(false);
+    if (!testResponse.ok) {
+      const errorText = await testResponse.text();
+      console.error('Repository access failed:', errorText);
+      throw new Error(`Repository access failed: ${testResponse.status} ${testResponse.statusText}`);
     }
-  };
 
-  // Initial fetch
-  useEffect(() => {
-    fetchQuestions();
+    // If repository access is successful, fetch issues
+    const issuesUrl = `${repoUrl}/issues?state=open&sort=created&direction=desc`;
+    console.log('Fetching issues from:', issuesUrl);
 
-    // Optional: Set up periodic refresh
-    const refreshInterval = setInterval(fetchQuestions, 30000); // Refresh every 30 seconds
+    const issuesResponse = await fetch(issuesUrl);
+    console.log('Issues response:', {
+      status: issuesResponse.status,
+      ok: issuesResponse.ok,
+      headers: Object.fromEntries(issuesResponse.headers.entries())
+    });
 
-    return () => clearInterval(refreshInterval);
-  }, []);
+    if (!issuesResponse.ok) {
+      const errorText = await issuesResponse.text();
+      console.error('Issues fetch failed:', errorText);
+      throw new Error(`Failed to fetch issues: ${issuesResponse.status} ${issuesResponse.statusText}`);
+    }
+
+    const issues = await issuesResponse.json();
+    console.log('Fetched issues:', issues);
+
+    // Process issues and set state as before...
+    const questionsWithAnswers = await Promise.all(
+      issues.map(async issue => {
+        try {
+          const commentsUrl = `${repoUrl}/issues/${issue.number}/comments`;
+          console.log(`Fetching comments for issue ${issue.number} from:`, commentsUrl);
+          
+          const commentsResponse = await fetch(commentsUrl);
+          
+          let comments = [];
+          if (commentsResponse.ok) {
+            comments = await commentsResponse.json();
+          } else {
+            console.warn(`Failed to fetch comments for issue ${issue.number}:`, 
+              await commentsResponse.text()
+            );
+          }
+
+          const { content, code } = parseIssueBody(issue.body);
+          return {
+            id: issue.number,
+            title: issue.title,
+            content,
+            code,
+            timestamp: new Date(issue.created_at).toLocaleString(),
+            answers: comments.map(comment => ({
+              id: comment.id,
+              ...parseIssueBody(comment.body),
+              timestamp: new Date(comment.created_at).toLocaleString()
+            }))
+          };
+        } catch (error) {
+          console.error(`Error processing issue ${issue.number}:`, error);
+          return null;
+        }
+      })
+    );
+
+    const validQuestions = questionsWithAnswers.filter(q => q !== null);
+    setQuestions(validQuestions);
+
+  } catch (error) {
+    console.error('Fetch error details:', {
+      message: error.message,
+      stack: error.stack,
+      name: error.name
+    });
+    setError(`Failed to load questions: ${error.message}`);
+  } finally {
+    setLoading(false);
+  }
+};
 
   // Question submission handler with modified error handling
   const handleSubmitQuestion = async (e) => {
