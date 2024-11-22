@@ -154,11 +154,6 @@ function App() {
       setLoading(true);
       setError(null);
 
-      console.log('Submitting question:', {
-        title: newQuestion.title,
-        body: formatIssueBody(newQuestion.content, newQuestion.code)
-      });
-
       const response = await fetch(
         `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/issues`,
         {
@@ -177,25 +172,29 @@ function App() {
       }
 
       const newIssue = await response.json();
-      console.log('New issue created:', newIssue);
 
-      // Add the new question to the state immediately
+      // Immediately add the new question to the state
       const newQuestionData = {
         id: newIssue.number,
         title: newIssue.title,
         content: newQuestion.content,
         code: newQuestion.code,
-        timestamp: new Date(newIssue.created_at).toLocaleString(),
+        timestamp: new Date().toLocaleString(),
         answers: []
       };
 
+      // Update state immediately
       setQuestions(prevQuestions => [newQuestionData, ...prevQuestions]);
       setNewQuestion({ title: '', content: '', code: '' });
       setShowNewQuestion(false);
-      alert('Question posted successfully!');
 
-      // Refresh the questions list to ensure everything is in sync
-      await fetchQuestions();
+      // Subtle notification
+      const notification = document.createElement('div');
+      notification.className = 'fixed bottom-4 right-4 bg-green-500 text-white px-4 py-2 rounded shadow-lg';
+      notification.textContent = 'Question posted successfully!';
+      document.body.appendChild(notification);
+      setTimeout(() => notification.remove(), 3000);
+
     } catch (err) {
       console.error('Error posting question:', err);
       setError('Failed to post question: ' + err.message);
@@ -241,121 +240,122 @@ function App() {
 
   // Handle question deletion
   const handleDeleteQuestion = async (questionId) => {
-    if (window.confirm('Are you sure you want to delete this question?')) {
-      try {
-        setLoading(true);
-        setError(null);
+    if (!window.confirm('Are you sure you want to delete this question?')) {
+      return;
+    }
 
-        // First, delete all comments of the issue
-        const commentsResponse = await fetch(
-          `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/issues/${questionId}/comments`,
-          { headers: createHeaders() }
-        );
+    // Immediately remove from UI
+    setQuestions(prevQuestions => 
+      prevQuestions.filter(q => q.id !== questionId)
+    );
 
-        if (commentsResponse.ok) {
-          const comments = await commentsResponse.json();
-          // Delete each comment
-          for (const comment of comments) {
-            await fetch(
-              `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/issues/comments/${comment.id}`,
-              {
-                method: 'DELETE',
-                headers: createHeaders()
-              }
-            );
-          }
-        }
+    try {
+      // Delete all comments first
+      const commentsResponse = await fetch(
+        `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/issues/${questionId}/comments`,
+        { headers: createHeaders() }
+      );
 
-        // Then close the issue
-        const response = await fetch(
-          `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/issues/${questionId}`,
-          {
-            method: 'PATCH',
-            headers: createHeaders(),
-            body: JSON.stringify({
-              state: 'closed'
-            })
-          }
-        );
-
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.message || 'Failed to delete question');
-        }
-
-        // Update local state
-        setQuestions(prevQuestions => 
-          prevQuestions.filter(q => q.id !== questionId)
-        );
-
-        // Wait a bit to ensure GitHub API has processed everything
-        await new Promise(resolve => setTimeout(resolve, 5));
-        
-        // Refresh the questions list
-        await fetchQuestions();
-        
-        alert('Question deleted successfully!');
-      } catch (err) {
-        console.error('Error deleting question:', err);
-        setError('Failed to delete question: ' + err.message);
-        // Refresh questions to ensure UI is in sync
-        await fetchQuestions();
-      } finally {
-        setLoading(false);
+      if (commentsResponse.ok) {
+        const comments = await commentsResponse.json();
+        await Promise.all(comments.map(comment => 
+          fetch(
+            `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/issues/comments/${comment.id}`,
+            {
+              method: 'DELETE',
+              headers: createHeaders()
+            }
+          )
+        ));
       }
+
+      // Close the issue
+      const response = await fetch(
+        `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/issues/${questionId}`,
+        {
+          method: 'PATCH',
+          headers: createHeaders(),
+          body: JSON.stringify({
+            state: 'closed'
+          })
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error('Failed to delete question');
+      }
+
+      // Show success notification
+      const notification = document.createElement('div');
+      notification.className = 'fixed bottom-4 right-4 bg-green-500 text-white px-4 py-2 rounded shadow-lg';
+      notification.textContent = 'Question deleted successfully!';
+      document.body.appendChild(notification);
+      setTimeout(() => notification.remove(), 3000);
+
+    } catch (err) {
+      console.error('Error deleting question:', err);
+      // Revert the optimistic update
+      fetchQuestions();
+      
+      // Show error notification
+      const notification = document.createElement('div');
+      notification.className = 'fixed bottom-4 right-4 bg-red-500 text-white px-4 py-2 rounded shadow-lg';
+      notification.textContent = 'Failed to delete question. Please try again.';
+      document.body.appendChild(notification);
+      setTimeout(() => notification.remove(), 3000);
     }
   };
 
   // Handle answer deletion
   const handleDeleteAnswer = async (questionId, answerId) => {
-    if (window.confirm('Are you sure you want to delete this answer?')) {
-      try {
-        setLoading(true);
-        setError(null);
+    if (!window.confirm('Are you sure you want to delete this answer?')) {
+      return;
+    }
 
-        console.log('Deleting answer:', answerId);
-
-        const response = await fetch(
-          `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/issues/comments/${answerId}`,
-          {
-            method: 'DELETE',
-            headers: createHeaders()
-          }
-        );
-
-        if (!response.ok && response.status !== 404) {
-          const errorData = await response.json().catch(() => ({}));
-          throw new Error(errorData.message || 'Failed to delete answer');
+    // Immediately update UI
+    setQuestions(prevQuestions => 
+      prevQuestions.map(q => {
+        if (q.id === questionId) {
+          return {
+            ...q,
+            answers: q.answers.filter(a => a.id !== answerId)
+          };
         }
+        return q;
+      })
+    );
 
-        // Update local state
-        setQuestions(prevQuestions => 
-          prevQuestions.map(q => {
-            if (q.id === questionId) {
-              return {
-                ...q,
-                answers: q.answers.filter(a => a.id !== answerId)
-              };
-            }
-            return q;
-          })
-        );
+    try {
+      const response = await fetch(
+        `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/issues/comments/${answerId}`,
+        {
+          method: 'DELETE',
+          headers: createHeaders()
+        }
+      );
 
-        // Wait a bit to ensure GitHub API has processed the deletion
-        await new Promise(resolve => setTimeout(resolve, 5));
-        
-        // Refresh the questions list
-        await fetchQuestions();
-        
-        alert('Answer deleted successfully!');
-      } catch (err) {
-        console.error('Error deleting answer:', err);
-        setError('Failed to delete answer: ' + err.message);
-        // Refresh questions to ensure UI is in sync
-        await fetchQuestions();
-      } finally {
-        setLoading(false);
+      if (!response.ok && response.status !== 404) {
+        throw new Error('Failed to delete answer');
       }
+
+      // Show success notification
+      const notification = document.createElement('div');
+      notification.className = 'fixed bottom-4 right-4 bg-green-500 text-white px-4 py-2 rounded shadow-lg';
+      notification.textContent = 'Answer deleted successfully!';
+      document.body.appendChild(notification);
+      setTimeout(() => notification.remove(), 3000);
+
+    } catch (err) {
+      console.error('Error deleting answer:', err);
+      // Revert the optimistic update
+      fetchQuestions();
+      
+      // Show error notification
+      const notification = document.createElement('div');
+      notification.className = 'fixed bottom-4 right-4 bg-red-500 text-white px-4 py-2 rounded shadow-lg';
+      notification.textContent = 'Failed to delete answer. Please try again.';
+      document.body.appendChild(notification);
+      setTimeout(() => notification.remove(), 3000);
     }
   };
 
