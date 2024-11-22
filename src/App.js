@@ -70,13 +70,6 @@ const apiCall = async (endpoint, options = {}) => {
   }
 };
 
-// Helper function to wait for GitHub updates
-const waitForGitHubUpdate = async () => {
-  // Wait for 2 seconds to allow GitHub to process the change
-  await new Promise(resolve => setTimeout(resolve, 2000));
-  return fetchQuestions();
-};
-
 // Simple SVG Icons
 const Icons = {
   Search: () => (
@@ -95,6 +88,17 @@ const Icons = {
       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
     </svg>
   )
+};
+
+
+// Define fetchQuestions as a function declaration that we'll use inside the component
+let fetchQuestions = async () => {}; // This will be redefined inside the component
+
+// Helper function to wait for GitHub updates
+const waitForGitHubUpdate = async () => {
+  // Wait for 2 seconds to allow GitHub to process the change
+  await new Promise(resolve => setTimeout(resolve, 2000));
+  return fetchQuestions();
 };
 function App() {
   // State management
