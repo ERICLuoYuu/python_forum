@@ -21,7 +21,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v3
 
-      - name: Setup Node.js
+      - name: Set up Node.js
         uses: actions/setup-node@v3
         with:
           node-version: '18'
@@ -34,15 +34,21 @@ jobs:
       - name: Create env file
         run: |
           echo "REACT_APP_GH_TOKEN=${{ secrets.GH_TOKEN }}" > .env
-          echo "Token exists: ${{ secrets.GH_TOKEN != '' }}"
+          echo "REACT_APP_ORIGIN=${{ github.event.repository.html_url }}" >> .env
 
       - name: Build
         run: CI=false npm run build
         env:
           REACT_APP_GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          REACT_APP_ORIGIN: ${{ github.event.repository.html_url }}
 
       - name: Setup Pages
         uses: actions/configure-pages@v3
+        with:
+          headers: |
+            Access-Control-Allow-Origin: *
+            Access-Control-Allow-Methods: GET, POST, PATCH, DELETE, OPTIONS
+            Access-Control-Allow-Headers: Content-Type, Authorization
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v2
