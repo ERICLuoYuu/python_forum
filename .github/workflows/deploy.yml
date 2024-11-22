@@ -35,9 +35,13 @@ jobs:
 
       - name: Create env file
         run: |
-          echo "REACT_APP_GH_TOKEN=${{ secrets.GH_TOKEN }}" > .env
-        env:
-          REACT_APP_GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          touch .env
+          echo "REACT_APP_GH_TOKEN=${{ secrets.GH_TOKEN }}" >> .env
+
+      - name: Debug Environment
+        run: |
+          echo "Checking for token presence (not showing value):"
+          echo "Token exists: ${{ secrets.GH_TOKEN != '' }}"
 
       - name: Build
         run: CI=false npm run build
