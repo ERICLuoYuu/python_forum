@@ -5,24 +5,7 @@ const GITHUB_OWNER = 'ERICLuoYuu';
 const GITHUB_REPO = 'student-qa-forum';
 
 // Utility functions
-// Create headers with authentication
-const createHeaders = () => {
-  const token = process.env.REACT_APP_GH_TOKEN;
-  console.log('Token present:', !!token); // Debug log
 
-  const headers = {
-    'Accept': 'application/vnd.github.v3+json',
-    'Content-Type': 'application/json',
-  };
-
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`; // Changed from 'token' to 'Bearer'
-  } else {
-    console.warn('GitHub token not found');
-  }
-
-  return headers;
-};
 const formatIssueBody = (content, code) => {
   return `${content}\n\n${code ? `\`\`\`python\n${code}\n\`\`\`` : ''}`;
 };
@@ -36,12 +19,45 @@ const parseIssueBody = (body) => {
   
   return { content, code };
 };
-// Utility function for API calls
+
+
+const wait = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+const retryOperation = async (operation, maxAttempts = 3, delay = 1000) => {
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return await operation();
+    } catch (error) {
+      if (attempt === maxAttempts) throw error;
+      await wait(delay * attempt);
+    }
+  }
+};
+
+// Modified createHeaders function
+const createHeaders = () => {
+  const token = process.env.REACT_APP_GH_TOKEN;
+  const headers = {
+    'Accept': 'application/vnd.github.v3+json',
+    'Content-Type': 'application/json',
+    'Cache-Control': 'no-cache, no-store, must-revalidate',
+    'Pragma': 'no-cache',
+    'Expires': '0'
+  };
+
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
+  return headers;
+};
+
+// Modified apiCall function with retry logic
 const apiCall = async (endpoint, options = {}) => {
   const baseUrl = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}`;
   const defaultHeaders = createHeaders();
   
-  try {
+  return retryOperation(async () => {
     const response = await fetch(`${baseUrl}${endpoint}`, {
       ...options,
       headers: {
@@ -55,17 +71,13 @@ const apiCall = async (endpoint, options = {}) => {
       throw new Error(errorData.message || `API call failed: ${response.status}`);
     }
 
-    if (response.status === 204) { // No content (DELETE operations)
+    if (response.status === 204) {
       return null;
     }
 
     return await response.json();
-  } catch (error) {
-    console.error('API call failed:', error);
-    throw error;
-  }
+  });
 };
-
 // Simple SVG Icons
 const Icons = {
   Search: () => (
@@ -105,52 +117,14 @@ function App() {
 
   const fetchQuestions = async () => {
   try {
-    setLoading(true);
-    setError(null);
-
-    console.log('Fetching questions...');
-    
-    // First, test the API connection
-    const testResponse = await fetch(
-      `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}`,
-      { headers: createHeaders() }
-    );
-
-    if (!testResponse.ok) {
-      console.error('Repository access failed:', await testResponse.text());
-      throw new Error('Repository access failed');
-    }
-
-    // Fetch issues
-    const issuesResponse = await fetch(
-      `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/issues?state=open&sort=created&direction=desc`,
-      { headers: createHeaders() }
-    );
-
-    if (!issuesResponse.ok) {
-      console.error('Issues fetch failed:', await issuesResponse.text());
-      throw new Error('Failed to fetch issues');
-    }
-
-    const issues = await issuesResponse.json();
-    console.log('Fetched issues:', issues);
+    const issues = await apiCall('/issues?state=open&sort=updated&direction=desc');
     
     const questionsWithAnswers = await Promise.all(
       issues.map(async issue => {
         try {
-          const commentsResponse = await fetch(
-            `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/issues/${issue.number}/comments`,
-            { headers: createHeaders() }
-          );
-          
-          let comments = [];
-          if (commentsResponse.ok) {
-            comments = await commentsResponse.json();
-          } else {
-            console.warn(`Failed to fetch comments for issue ${issue.number}`);
-          }
-
+          const comments = await apiCall(`/issues/${issue.number}/comments`);
           const { content, code } = parseIssueBody(issue.body);
+          
           return {
             id: issue.number,
             title: issue.title,
@@ -170,13 +144,9 @@ function App() {
       })
     );
 
-    const validQuestions = questionsWithAnswers.filter(q => q !== null);
-    setQuestions(validQuestions);
+    return questionsWithAnswers.filter(q => q !== null);
   } catch (error) {
-    console.error('Fetch error:', error);
-    setError(`Failed to load questions: ${error.message}`);
-  } finally {
-    setLoading(false);
+    throw new Error(`Failed to fetch questions: ${error.message}`);
   }
 };
   
@@ -184,63 +154,74 @@ function App() {
 
   // Optimized question posting
   const handleSubmitQuestion = async (e) => {
-    e.preventDefault();
-    if (!newQuestion.title.trim() || !newQuestion.content.trim()) {
-      alert('Title and description are required!');
-      return;
-    }
-  
-    const optimisticQuestion = {
-      id: `temp-${Date.now()}`,
-      title: newQuestion.title,
-      content: newQuestion.content,
-      code: newQuestion.code,
-      timestamp: new Date().toLocaleString(),
-      answers: []
-    };
-  
-    // Immediate UI update
-    setQuestions(prev => [optimisticQuestion, ...prev]);
-    setNewQuestion({ title: '', content: '', code: '' });
-    setShowNewQuestion(false);
-  
-    try {
-      const response = await apiCall('/issues', {
+  e.preventDefault();
+  if (!newQuestion.title.trim() || !newQuestion.content.trim()) {
+    alert('Title and description are required!');
+    return;
+  }
+
+  const optimisticQuestion = {
+    id: `temp-${Date.now()}`,
+    title: newQuestion.title,
+    content: newQuestion.content,
+    code: newQuestion.code,
+    timestamp: new Date().toLocaleString(),
+    answers: []
+  };
+
+  // Immediate UI update
+  setQuestions(prev => [optimisticQuestion, ...prev]);
+  setNewQuestion({ title: '', content: '', code: '' });
+  setShowNewQuestion(false);
+
+  try {
+    const response = await retryOperation(async () => {
+      const result = await apiCall('/issues', {
         method: 'POST',
         body: JSON.stringify({
           title: newQuestion.title,
           body: formatIssueBody(newQuestion.content, newQuestion.code),
         })
       });
-  
-      // Update the temporary question with real data
-      setQuestions(prev => [
-        {
-          id: response.number,
-          title: response.title,
-          content: newQuestion.content,
-          code: newQuestion.code,
-          timestamp: new Date(response.created_at).toLocaleString(),
-          answers: []
-        },
-        ...prev.filter(q => q.id !== optimisticQuestion.id)
-      ]);
-  
-    } catch (error) {
-      // Revert on failure
-      setQuestions(prev => prev.filter(q => q.id !== optimisticQuestion.id));
-      setError(`Failed to post question: ${error.message}`);
-    }
-  };
 
-  // Handle answer submission
-  const handleSubmitAnswer = async (questionId, answerContent, answerCode) => {
+      // Wait briefly to ensure GitHub API has processed the change
+      await wait(1000);
+      return result;
+    });
+
+    // Fetch the updated question to ensure we have the correct data
+    const updatedQuestion = await apiCall(`/issues/${response.number}`);
+    const { content, code } = parseIssueBody(updatedQuestion.body);
+
+    // Update with real data
+    setQuestions(prev => [
+      {
+        id: updatedQuestion.number,
+        title: updatedQuestion.title,
+        content,
+        code,
+        timestamp: new Date(updatedQuestion.created_at).toLocaleString(),
+        answers: []
+      },
+      ...prev.filter(q => q.id !== optimisticQuestion.id)
+    ]);
+
+  } catch (error) {
+    setQuestions(prev => prev.filter(q => q.id !== optimisticQuestion.id));
+    setError(`Failed to post question: ${error.message}`);
+    // Fetch latest questions to ensure consistency
+    const questions = await fetchQuestions();
+    setQuestions(questions);
+  }
+};
+
+// Modified handleSubmitAnswer
+const handleSubmitAnswer = async (questionId, answerContent, answerCode) => {
   if (!answerContent.trim()) {
     alert('Answer content cannot be empty');
     return;
   }
 
-  // Create optimistic answer
   const optimisticAnswer = {
     id: `temp-${Date.now()}`,
     content: answerContent,
@@ -248,7 +229,6 @@ function App() {
     timestamp: new Date().toLocaleString()
   };
 
-  // Clear input fields immediately
   const contentElement = document.getElementById(`answer-content-${questionId}`);
   const codeElement = document.getElementById(`answer-code-${questionId}`);
   const content = contentElement.value;
@@ -256,7 +236,6 @@ function App() {
   contentElement.value = '';
   codeElement.value = '';
 
-  // Immediate UI update
   setQuestions(prev =>
     prev.map(q => {
       if (q.id === questionId) {
@@ -270,41 +249,52 @@ function App() {
   );
 
   try {
-    const response = await apiCall(`/issues/${questionId}/comments`, {
-      method: 'POST',
-      body: JSON.stringify({
-        body: formatIssueBody(answerContent, answerCode)
-      })
+    const response = await retryOperation(async () => {
+      const result = await apiCall(`/issues/${questionId}/comments`, {
+        method: 'POST',
+        body: JSON.stringify({
+          body: formatIssueBody(answerContent, answerCode)
+        })
+      });
+
+      // Wait briefly to ensure GitHub API has processed the change
+      await wait(1000);
+      return result;
     });
 
-    // Update optimistic answer with real data
-    setQuestions(prev =>
-      prev.map(q => {
-        if (q.id === questionId) {
-          return {
-            ...q,
-            answers: q.answers.map(a =>
-              a.id === optimisticAnswer.id
-                ? {
-                    id: response.id,
-                    content: answerContent,
-                    code: answerCode,
-                    timestamp: new Date(response.created_at).toLocaleString()
-                  }
-                : a
-            )
-          };
-        }
-        return q;
-      })
-    );
+    // Fetch the updated comments to ensure we have the correct data
+    const updatedComments = await apiCall(`/issues/${questionId}/comments`);
+    const updatedAnswer = updatedComments.find(c => c.id === response.id);
+
+    if (updatedAnswer) {
+      const { content: updatedContent, code: updatedCode } = parseIssueBody(updatedAnswer.body);
+      
+      setQuestions(prev =>
+        prev.map(q => {
+          if (q.id === questionId) {
+            return {
+              ...q,
+              answers: q.answers.map(a =>
+                a.id === optimisticAnswer.id
+                  ? {
+                      id: updatedAnswer.id,
+                      content: updatedContent,
+                      code: updatedCode,
+                      timestamp: new Date(updatedAnswer.created_at).toLocaleString()
+                    }
+                  : a
+              )
+            };
+          }
+          return q;
+        })
+      );
+    }
 
   } catch (error) {
-    // Restore input values on failure
     contentElement.value = content;
     codeElement.value = code;
     
-    // Remove optimistic answer
     setQuestions(prev =>
       prev.map(q => {
         if (q.id === questionId) {
@@ -317,6 +307,9 @@ function App() {
       })
     );
     setError(`Failed to post answer: ${error.message}`);
+    // Fetch latest questions to ensure consistency
+    const questions = await fetchQuestions();
+    setQuestions(questions);
   }
 };
 
@@ -326,48 +319,47 @@ function App() {
     return;
   }
 
-  // Store question for potential rollback
   const questionToDelete = questions.find(q => q.id === questionId);
-  
-  // Immediate UI update
   setQuestions(prev => prev.filter(q => q.id !== questionId));
 
   try {
-    // Delete comments and close issue in parallel
-    await Promise.all([
-      // Delete all comments
-      apiCall(`/issues/${questionId}/comments`).then(comments =>
-        Promise.all(
-          comments.map(comment =>
-            apiCall(`/issues/comments/${comment.id}`, { method: 'DELETE' })
-          )
+    await retryOperation(async () => {
+      // Delete comments first
+      const comments = await apiCall(`/issues/${questionId}/comments`);
+      await Promise.all(
+        comments.map(comment =>
+          apiCall(`/issues/comments/${comment.id}`, { method: 'DELETE' })
         )
-      ),
-      // Close the issue
-      apiCall(`/issues/${questionId}`, {
+      );
+
+      // Then close the issue
+      await apiCall(`/issues/${questionId}`, {
         method: 'PATCH',
         body: JSON.stringify({ state: 'closed' })
-      })
-    ]);
+      });
+
+      // Wait briefly to ensure GitHub API has processed all changes
+      await wait(1000);
+    });
 
   } catch (error) {
-    // Rollback on failure
     setQuestions(prev => [...prev, questionToDelete]);
     setError(`Failed to delete question: ${error.message}`);
+    // Fetch latest questions to ensure consistency
+    const questions = await fetchQuestions();
+    setQuestions(questions);
   }
 };
 
-// Optimized answer deletion
+// Modified handleDeleteAnswer
 const handleDeleteAnswer = async (questionId, answerId) => {
   if (!window.confirm('Are you sure you want to delete this answer?')) {
     return;
   }
 
-  // Store the current state of answers for potential rollback
   const currentQuestion = questions.find(q => q.id === questionId);
   const answerToDelete = currentQuestion.answers.find(a => a.id === answerId);
 
-  // Immediate UI update
   setQuestions(prev =>
     prev.map(q => {
       if (q.id === questionId) {
@@ -381,11 +373,13 @@ const handleDeleteAnswer = async (questionId, answerId) => {
   );
 
   try {
-    await apiCall(`/issues/comments/${answerId}`, {
-      method: 'DELETE'
+    await retryOperation(async () => {
+      await apiCall(`/issues/comments/${answerId}`, { method: 'DELETE' });
+      // Wait briefly to ensure GitHub API has processed the change
+      await wait(1000);
     });
+
   } catch (error) {
-    // Rollback on failure
     setQuestions(prev =>
       prev.map(q => {
         if (q.id === questionId) {
@@ -398,6 +392,9 @@ const handleDeleteAnswer = async (questionId, answerId) => {
       })
     );
     setError(`Failed to delete answer: ${error.message}`);
+    // Fetch latest questions to ensure consistency
+    const questions = await fetchQuestions();
+    setQuestions(questions);
   }
 };
 
